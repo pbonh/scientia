@@ -98,8 +98,8 @@ The spec stage of the OpenSpec intent-driven lifecycle. Produces one
 
 6. **Append to `development/log.md`**:
 
-   ```markdown
-   - YYYY-MM-DDTHH:MM:SSZ — scientia-intent-spec — spec-authored — <tenant>/<change-id> — capability=<slug> scenarios=<n>
+   ```bash
+   printf '%s\n' '- YYYY-MM-DDTHH:MM:SSZ — scientia-intent-spec — spec-authored — <tenant>/<change-id> — capability=<slug> scenarios=<n>' >> development/log.md
    ```
 
 7. **Hand off.** Report to the orchestrator: stage transitioned to

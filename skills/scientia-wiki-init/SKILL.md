@@ -66,8 +66,8 @@ Scaffold the on-disk layout scientia depends on, in this exact order:
    `development/config.yaml` and confirming the structure matches the
    skeleton above. Append a line to `development/log.md`:
 
-   ```markdown
-   - YYYY-MM-DDTHH:MM:SSZ — scientia-wiki-init — bootstrap-complete — bundle <version>
+   ```bash
+   printf '%s\n' '- YYYY-MM-DDTHH:MM:SSZ — scientia-wiki-init — bootstrap-complete — bundle <version>' >> development/log.md
    ```
 
 5. **Hand off.** Inform the user the scaffold is complete and the next

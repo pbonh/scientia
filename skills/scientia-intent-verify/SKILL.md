@@ -90,8 +90,8 @@ intent phase and the kanban phase.
 
 5. **Append to `development/log.md`**:
 
-   ```markdown
-   - YYYY-MM-DDTHH:MM:SSZ — scientia-intent-verify — verified — <tenant>/<change-id> — critical=<n> warning=<n> suggestion=<n>
+   ```bash
+   printf '%s\n' '- YYYY-MM-DDTHH:MM:SSZ — scientia-intent-verify — verified — <tenant>/<change-id> — critical=<n> warning=<n> suggestion=<n>' >> development/log.md
    ```
 
 6. **Hand off.** If worst severity ≥ `block_on_severity`: refuse to

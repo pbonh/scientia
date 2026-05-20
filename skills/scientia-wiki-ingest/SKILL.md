@@ -104,8 +104,8 @@ Ingest one `raw/<source>` document into the wiki, producing:
 
 7. Append to `wiki/log.md` one line per page touched:
 
-   ```markdown
-   - YYYY-MM-DDTHH:MM:SSZ — scientia-wiki-ingest — created — concepts/<slug>.md — from raw/<source>
+   ```bash
+   printf '%s\n' '- YYYY-MM-DDTHH:MM:SSZ — scientia-wiki-ingest — created — concepts/<slug>.md — from raw/<source>' >> wiki/log.md
    ```
 
 ## Quality bar

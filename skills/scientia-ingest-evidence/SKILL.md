@@ -54,14 +54,14 @@ orchestrator's polling loop may also trigger it.
 
 5. **Append to `wiki/log.md`** one line per spec page touched:
 
-   ```markdown
-   - YYYY-MM-DDTHH:MM:SSZ — scientia-ingest-evidence — appended — wiki/specs/<spec>.md — task=<id>
+   ```bash
+   printf '%s\n' '- YYYY-MM-DDTHH:MM:SSZ — scientia-ingest-evidence — appended — wiki/specs/<spec>.md — task=<id>' >> wiki/log.md
    ```
 
 6. **Append to `development/log.md`** one line per task ingested:
 
-   ```markdown
-   - YYYY-MM-DDTHH:MM:SSZ — scientia-ingest-evidence — evidence-appended — <tenant>/<change-id> — task=<id>
+   ```bash
+   printf '%s\n' '- YYYY-MM-DDTHH:MM:SSZ — scientia-ingest-evidence — evidence-appended — <tenant>/<change-id> — task=<id>' >> development/log.md
    ```
 
 ## Gates

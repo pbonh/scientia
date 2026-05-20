@@ -38,8 +38,19 @@ for the 1% case.
      spec's `## Implementation Evidence`). If not, **refuse** and
      direct the user to ingest first.
 
-3. **Archive** via `hermes kanban archive <task-id>`. This sets
-   status `done → archived` and GC's the workspace directory.
+3. **Archive** via `hermes kanban archive <task-id> [<task-id> …]`.
+   `task_ids` are **positional** (space-separated); there is no
+   `--ids` / `--task` flag. Single-task and bulk forms:
+
+   ```bash
+   # Single task:
+   hermes kanban archive t_d733f67e
+
+   # Bulk (one call per batch; all-or-nothing per Hermes):
+   hermes kanban archive t_a1 t_b2 t_c3 t_d4
+   ```
+
+   This sets status `done → archived` and GC's the workspace directory.
 
 4. **Update the task index** at
    `development/tasks/<tenant>/<change-id>/<task-id>.md`: mark
@@ -47,8 +58,8 @@ for the 1% case.
 
 5. **Append to `development/log.md`**:
 
-   ```markdown
-   - YYYY-MM-DDTHH:MM:SSZ — scientia-kanban-archive — archived — <tenant>/<change-id> — task=<id>
+   ```bash
+   printf '%s\n' '- YYYY-MM-DDTHH:MM:SSZ — scientia-kanban-archive — archived — <tenant>/<change-id> — task=<id>' >> development/log.md
    ```
 
 ## Gates

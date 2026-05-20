@@ -99,8 +99,8 @@ inlined into the kanban parent task body as
 
 5. **Append to `development/log.md`**:
 
-   ```markdown
-   - YYYY-MM-DDTHH:MM:SSZ — scientia-intent-tasks — tasks-listed — <tenant>/<change-id> — task_count=<n>
+   ```bash
+   printf '%s\n' '- YYYY-MM-DDTHH:MM:SSZ — scientia-intent-tasks — tasks-listed — <tenant>/<change-id> — task_count=<n>' >> development/log.md
    ```
 
 6. **Hand off.** Stage transitions to `tasks`. Next recommended

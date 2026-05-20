@@ -268,8 +268,8 @@ Both squads emit on the same `kanban.db`. The Hermes CLI scopes by
 `--tenant`:
 
 ```bash
-$ hermes kanban list --tenant billing --format json
-$ hermes kanban list --tenant identity --format json
+$ hermes kanban list --tenant billing --json
+$ hermes kanban list --tenant identity --json
 ```
 
 `scientia-kanban-emit` always passes `--tenant <bounded-context>`

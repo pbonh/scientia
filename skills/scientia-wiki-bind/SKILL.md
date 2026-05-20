@@ -97,8 +97,8 @@ Refuse to bind if any of:
 
 5. **Update `development/log.md`:**
 
-   ```markdown
-   - YYYY-MM-DDTHH:MM:SSZ — scientia-wiki-bind — manifest-bound — <tenant>/<change-id> — wiki_snapshot=<rev-short>
+   ```bash
+   printf '%s\n' '- YYYY-MM-DDTHH:MM:SSZ — scientia-wiki-bind — manifest-bound — <tenant>/<change-id> — wiki_snapshot=<rev-short>' >> development/log.md
    ```
 
 6. **Hand off.** Report to the orchestrator: stage transitioned to

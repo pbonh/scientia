@@ -54,8 +54,8 @@ and append it to the spec page.
 
 4. **Update `wiki/log.md`:**
 
-   ```markdown
-   - YYYY-MM-DDTHH:MM:SSZ — scientia-aggregator — evidence-appended — wiki/specs/<spec-slug>.md — <n>-scenarios
+   ```bash
+   printf '%s\n' '- YYYY-MM-DDTHH:MM:SSZ — scientia-aggregator — evidence-appended — wiki/specs/<spec-slug>.md — <n>-scenarios' >> wiki/log.md
    ```
 
 5. **Post a comment** to your parent task summarizing:

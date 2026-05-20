@@ -58,8 +58,8 @@ the failed gate, then re-runs.
       fails after step (a) succeeded, surface the partial state and
       direct user to manually re-run step (b).
    c. **Wiki finalization.** Append to `wiki/log.md`:
-      ```markdown
-      - YYYY-MM-DDTHH:MM:SSZ — scientia-ingest-archive — change-archived — <tenant>/<change-id> — kanban_tasks=<n>
+      ```bash
+      printf '%s\n' '- YYYY-MM-DDTHH:MM:SSZ — scientia-ingest-archive — change-archived — <tenant>/<change-id> — kanban_tasks=<n>' >> wiki/log.md
       ```
       Update `wiki/syntheses/<tenant>-<change-id>.md` frontmatter:
       `status: archived`.
@@ -75,8 +75,8 @@ the failed gate, then re-runs.
 
 7. **Append a final entry** to `development/log.md`:
 
-   ```markdown
-   - YYYY-MM-DDTHH:MM:SSZ — scientia-ingest-archive — archived — <tenant>/<change-id> — atomic=ok
+   ```bash
+   printf '%s\n' '- YYYY-MM-DDTHH:MM:SSZ — scientia-ingest-archive — archived — <tenant>/<change-id> — atomic=ok' >> development/log.md
    ```
 
 8. **Hand off.** Report archive complete. The tenant is now idle;

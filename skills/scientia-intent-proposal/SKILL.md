@@ -78,8 +78,8 @@ The proposal stage of the OpenSpec intent-driven lifecycle. Produces
 
 4. **Append to `development/log.md`:**
 
-   ```markdown
-   - YYYY-MM-DDTHH:MM:SSZ — scientia-intent-proposal — proposal-drafted — <tenant>/<change-id> — capabilities=<n> breaking=<n>
+   ```bash
+   printf '%s\n' '- YYYY-MM-DDTHH:MM:SSZ — scientia-intent-proposal — proposal-drafted — <tenant>/<change-id> — capabilities=<n> breaking=<n>' >> development/log.md
    ```
 
 5. **Hand off.** Report to the orchestrator: stage transitioned to

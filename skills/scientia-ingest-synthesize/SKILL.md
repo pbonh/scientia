@@ -113,8 +113,8 @@ Direct writes to `wiki/concepts/` and `wiki/entities/` are not allowed
 
 6. **Append to `development/log.md`**:
 
-   ```markdown
-   - YYYY-MM-DDTHH:MM:SSZ — scientia-ingest-synthesize — synthesized — <tenant>/<change-id> — proposed_edits=<n>
+   ```bash
+   printf '%s\n' '- YYYY-MM-DDTHH:MM:SSZ — scientia-ingest-synthesize — synthesized — <tenant>/<change-id> — proposed_edits=<n>' >> development/log.md
    ```
 
 7. **Hand off.** Tell the user the synthesis is ready for review.

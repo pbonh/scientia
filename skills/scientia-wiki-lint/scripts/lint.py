@@ -36,6 +36,20 @@ TYPE_BY_DIR = {
 
 WIKILINK_RE = re.compile(r"\[\[([^\]|]+)(?:\|[^\]]*)?\]\]")
 FRONTMATTER_RE = re.compile(r"^---\n(.*?)\n---", re.DOTALL)
+FENCED_CODE_RE = re.compile(r"^(```|~~~).*?^\1", re.DOTALL | re.MULTILINE)
+INLINE_CODE_RE = re.compile(r"`[^`\n]*`")
+
+
+def strip_code_spans(text: str) -> str:
+    """Remove fenced and inline code so wikilinks inside snippets are ignored."""
+    text = FENCED_CODE_RE.sub("", text)
+    text = INLINE_CODE_RE.sub("", text)
+    return text
+
+
+def is_real_wikilink_target(target: str) -> bool:
+    """Real wiki targets are slug-like — reject anything with whitespace or angle brackets."""
+    return bool(target) and not any(c in target for c in " \t<>")
 
 
 @dataclass
@@ -129,12 +143,15 @@ def check_page(path: Path, wiki_dir: Path, all_pages: set[Path], report: Report)
     if "sources" not in fm:
         report.add("sources-missing", "suggestion", rel, "no sources field")
 
-    # Wikilink resolution.
-    for m in WIKILINK_RE.finditer(text):
+    # Wikilink resolution. Strip code spans first so vim keybindings,
+    # shell snippets, etc. that happen to contain `[[...]]` aren't
+    # treated as wikilinks.
+    prose = strip_code_spans(text)
+    for m in WIKILINK_RE.finditer(prose):
         target = m.group(1).strip()
         # Strip section anchors.
         target = target.split("#", 1)[0]
-        if not target:
+        if not is_real_wikilink_target(target):
             continue
         # Resolve as relative to wiki_dir.
         target_path = wiki_dir / (target + ".md")
@@ -193,8 +210,11 @@ def check_orphans(wiki_dir: Path, report: Report) -> None:
     referenced: set[str] = set()
     for ctx in contexts_dir.glob("*.md"):
         text = ctx.read_text(encoding="utf-8", errors="ignore")
-        for m in WIKILINK_RE.finditer(text):
-            referenced.add(m.group(1).split("#", 1)[0].strip())
+        prose = strip_code_spans(text)
+        for m in WIKILINK_RE.finditer(prose):
+            target = m.group(1).split("#", 1)[0].strip()
+            if is_real_wikilink_target(target):
+                referenced.add(target)
 
     for kind in ("concepts", "entities"):
         d = wiki_dir / kind

@@ -554,7 +554,7 @@ scientia-kanban-init has not run on this host. Run it now?
 - Copies four profiles to `~/.hermes/profiles/`:
   `scientia-implementer.md`, `scientia-reviewer.md`,
   `scientia-integrator.md`, `scientia-aggregator.md`.
-- Smoke-tests `hermes kanban list --format json`.
+- Smoke-tests `hermes kanban list --json`.
 
 Logs `host-ready` to `development/log.md`. Idempotent on subsequent
 runs.

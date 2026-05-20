@@ -20,7 +20,7 @@ Inspect the board. Mutations are owned by `scientia-kanban-emit` and
    - a tenant only (show all of that tenant's tasks),
    - `--all` (every in-flight tenant).
 
-2. **List tasks** via `hermes kanban list --tenant <t> --format json`.
+2. **List tasks** via `hermes kanban list --tenant <t> --json`.
    Filter to rows whose body or title contains the change-id (the
    `@wiki-spec` tag is sufficient).
 

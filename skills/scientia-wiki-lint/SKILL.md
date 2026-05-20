@@ -50,8 +50,8 @@ the linter checks and how to act on the report.
 
 4. **Append a summary line** to `development/log.md`:
 
-   ```markdown
-   - YYYY-MM-DDTHH:MM:SSZ — scientia-wiki-lint — completed — — critical=0 warning=2 suggestion=5
+   ```bash
+   printf '%s\n' '- YYYY-MM-DDTHH:MM:SSZ — scientia-wiki-lint — completed — — critical=0 warning=2 suggestion=5' >> development/log.md
    ```
 
 ## What this skill never does

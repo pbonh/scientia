@@ -143,6 +143,20 @@ Refuse to emit if any of:
    - **Absolute workspace paths only** (confused-deputy guard).
    - `--tenant` is the bounded-context slug, always.
 
+   **Rejected flags (do NOT invent these — Hermes will error out with
+   `argparse: invalid choice` or `unrecognized arguments`):**
+
+   | If you reach for… | Use instead |
+   |---|---|
+   | `--title "…"` | positional `"$TITLE"` (last arg) |
+   | `--body-file <path>` | `--body "$(cat <path>)"` |
+   | `--depends-on <id>` | `--parent <id>` (repeatable) |
+   | `--require-approval` | `--triage` (parks task for human promotion) |
+   | `--format json` on `kanban list` / `kanban dispatch` | `--json` |
+
+   Re-verify with `hermes kanban create --help` if a flag here ever
+   looks stale.
+
 6. **Re-emit semantics.** Hermes' `create --idempotency-key` returns the
    existing task id when a non-archived task with that key already
    exists, but it does **not** update the body / title / assignee —
@@ -169,8 +183,8 @@ Refuse to emit if any of:
 
 9. **Append to `development/log.md`**:
 
-   ```markdown
-   - YYYY-MM-DDTHH:MM:SSZ — scientia-kanban-emit — emitted — <tenant>/<change-id> — pattern=<P2|P3|P5|...> tasks=<n>
+   ```bash
+   printf '%s\n' '- YYYY-MM-DDTHH:MM:SSZ — scientia-kanban-emit — emitted — <tenant>/<change-id> — pattern=<P2|P3|P5|...> tasks=<n>' >> development/log.md
    ```
 
 10. **Hand off.** Stage transitions to `emitted`. Recommended next
@@ -180,6 +194,22 @@ Refuse to emit if any of:
 
 - `scripts/idempotency_key.py` — compute the (spec-slug, adr-id, sha)
   triple from a `spec.md` and a scenario block.
+
+  ```bash
+  # Parent key (one per spec×ADR):
+  python3 scripts/idempotency_key.py --spec <path/to/spec.md> --adr ADR-NNNN
+
+  # Child key (per Gherkin scenario):
+  python3 scripts/idempotency_key.py \
+      --spec <path/to/spec.md> --adr ADR-NNNN --scenario <scenario-slug>
+
+  # Machine-readable output:
+  python3 scripts/idempotency_key.py --spec … --adr … [--scenario …] --json
+  ```
+
+  The `--spec` value is a filesystem path to the spec.md; `--adr` is
+  the bare id (`ADR-NNNN`, not a path). The script prints the key to
+  stdout.
 - `scripts/emit.py` — orchestrate the full emit pipeline (preflights,
   pattern selection, body construction, hermes CLI invocation,
   `## Kanban Tasks` writeback).

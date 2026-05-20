@@ -78,8 +78,8 @@ still warning"*):
 1. Confirm explicitly: *"You're asking to override the verify gate at
    threshold WARNING. Confirm with: override gate verify."*
 2. On confirmation, append to `development/log.md`:
-   ```markdown
-   - 2026-05-19T17:00:00Z — orchestrator — gate-override — billing/2026-05-19-add-refunds — verify@WARNING
+   ```bash
+   printf '%s\n' '- 2026-05-19T17:00:00Z — orchestrator — gate-override — billing/2026-05-19-add-refunds — verify@WARNING' >> development/log.md
    ```
 3. Proceed with the requested delegation.
 

@@ -107,8 +107,8 @@ concrete *how*, while honoring every in-force ADR.
 
 5. **Append to `development/log.md`**:
 
-   ```markdown
-   - YYYY-MM-DDTHH:MM:SSZ — scientia-intent-design — design-drafted — <tenant>/<change-id> — adrs_in_force=<n> open_questions=<n>
+   ```bash
+   printf '%s\n' '- YYYY-MM-DDTHH:MM:SSZ — scientia-intent-design — design-drafted — <tenant>/<change-id> — adrs_in_force=<n> open_questions=<n>' >> development/log.md
    ```
 
 6. **Hand off.** Stage transitions to `design`. Next recommended

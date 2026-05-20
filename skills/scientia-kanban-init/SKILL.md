@@ -1,6 +1,6 @@
 ---
 name: scientia-kanban-init
-description: One-shot Hermes Kanban bootstrap for the host. Copies the four scientia agent profiles from this skill's assets/profiles/ to ~/.hermes/profiles/, verifies the hermes CLI is on PATH, confirms the kanban.db path declared in development/config.yaml is writable, and registers scientia-kanban-worker as the required worker skill. Run once per host (not per repo) on first scientia use, or whenever the user says "initialize Hermes". Idempotent — never overwrites a hand-edited profile.
+description: One-shot Hermes Kanban bootstrap for the host. Creates the four scientia agent profile directories via `hermes profile create`, writes their SOUL.md bodies from this skill's assets/profiles/, symlinks the scientia skills (kanban-worker, grill, …) into ~/.hermes/skills/ so emit's `--skill scientia-…` resolves, verifies the hermes CLI is on PATH and the kanban.db path declared in development/config.yaml is writable, and confirms the Hermes gateway is up. Run once per host (not per repo) on first scientia use, or whenever the user says "initialize Hermes". Idempotent — never overwrites a hand-edited SOUL.md or pre-existing skill symlink.
 license: MIT
 metadata:
   bundle: scientia
@@ -24,30 +24,65 @@ Make this host ready to run the scientia kanban phase.
    writable. If the file does not exist, let Hermes create it on first
    use; do not pre-create.
 
-3. **Copy the four scientia agent profiles** from this skill's
-   `assets/profiles/` directory (resolved relative to the skill's
-   on-disk location, e.g. `~/.agents/skills/scientia/skills/scientia-kanban-init/assets/profiles/`)
-   into `~/.hermes/profiles/`:
+3. **Create the four scientia agent profiles.** Hermes profiles are
+   *directories* (created by `hermes profile create`), not loose
+   `.md` files. For each name in
+   `scientia-{implementer,reviewer,integrator,aggregator}`:
 
-   - `scientia-implementer.md`
-   - `scientia-reviewer.md`
-   - `scientia-integrator.md`
-   - `scientia-aggregator.md`
+   ```bash
+   if ! hermes profile show "$name" >/dev/null 2>&1; then
+     hermes profile create "$name" --no-alias
+   fi
+   ```
 
-   Create `~/.hermes/profiles/` if it does not exist. If a profile of
-   the same name already exists at the target, **do not overwrite**.
-   Log `profile-already-present` to `development/log.md` and continue.
-   To force an overwrite (e.g., after upgrading scientia), the user
-   must explicitly remove the existing profile first:
-   `rm ~/.hermes/profiles/scientia-implementer.md` and re-run this
-   skill.
+   `--no-alias` skips writing a `~/.local/bin/<name>` wrapper script;
+   these profiles are spawn-only, not user-facing. `profile create`
+   scaffolds `~/.hermes/profiles/<name>/` with `config.yaml`, `.env`,
+   `SOUL.md`, `skills/`, `sessions/`, etc.
 
-4. **Register `scientia-kanban-worker` as the worker skill.** Each
-   profile's body already names `scientia-kanban-worker` in its
-   `Skills:` section. This skill verifies that the corresponding skill
-   directory exists in the client's skills directory.
+   Then overwrite the auto-generated `SOUL.md` with the scientia
+   profile body from this skill's `assets/profiles/` directory
+   (resolved relative to the skill's on-disk location, e.g.
+   `~/.agents/skills/scientia/skills/scientia-kanban-init/assets/profiles/`):
 
-5. **Smoke-test.** Run `hermes kanban list --format json` and verify
+   ```bash
+   cp "$ASSETS/profiles/$name.md" ~/.hermes/profiles/"$name"/SOUL.md
+   ```
+
+   **Idempotency.** If `SOUL.md` already exists and its sha256 differs
+   from the asset's sha256, **do not overwrite** — log
+   `profile-already-present` to `development/log.md` and continue
+   (the user may have hand-edited). To force an overwrite (e.g.,
+   after upgrading scientia), the user must explicitly remove the
+   existing `SOUL.md` first: `rm ~/.hermes/profiles/$name/SOUL.md`
+   and re-run this skill.
+
+4. **Install the scientia skills into `~/.hermes/skills/`.** Hermes
+   discovers skills by their presence under `~/.hermes/skills/<name>/`
+   (either a category subdir, or a top-level symlink to a
+   `SKILL.md`-bearing directory). Symlink each scientia skill the
+   profiles reference into that tree so `--skill scientia-…`
+   invocations from `scientia-kanban-emit` resolve.
+
+   For each `<name>` in the scientia bundle's `skills/` directory
+   (in particular `scientia-kanban-worker` and `scientia-grill`,
+   which every profile loads):
+
+   ```bash
+   if [ ! -e ~/.hermes/skills/"$name" ]; then
+     ln -s "$BUNDLE_ROOT/skills/$name" ~/.hermes/skills/"$name"
+   fi
+   ```
+
+   `$BUNDLE_ROOT` is the scientia clone (e.g.
+   `~/.agents/skills/scientia/`). Resolve it relative to this
+   `SKILL.md`'s on-disk location (`../../`).
+
+   Verify with `hermes skills list --source local | grep scientia-` —
+   you should see `scientia-kanban-worker` and `scientia-grill`
+   (plus any other scientia skills you symlinked) as `enabled`.
+
+5. **Smoke-test.** Run `hermes kanban list --json` and verify
    it returns valid JSON (even if empty). If it errors, report and
    refuse to mark init complete.
 
@@ -89,8 +124,8 @@ Make this host ready to run the scientia kanban phase.
 
 7. **Append to `development/log.md`**:
 
-   ```markdown
-   - YYYY-MM-DDTHH:MM:SSZ — scientia-kanban-init — host-ready — — profiles=4 kanban_db=<path>
+   ```bash
+   printf '%s\n' '- YYYY-MM-DDTHH:MM:SSZ — scientia-kanban-init — host-ready — — profiles=4 kanban_db=<path>' >> development/log.md
    ```
 
 8. **Report ready.** The host is now ready to run

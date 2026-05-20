@@ -107,14 +107,28 @@ If the user wants to bypass a gate, require explicit *"override gate
 ## Logging
 
 After every state transition (entering or exiting a phase, recommending a
-delegation, applying a gate override), append to `development/log.md`:
+delegation, applying a gate override), append one line to
+`development/log.md` of the form:
 
-```markdown
+```
 - YYYY-MM-DDTHH:MM:SSZ — orchestrator — <event> — <tenant>/<change-id> — <details>
 ```
 
-This log is the orchestrator's audit trail and the canonical record of
-*why* the pipeline is where it is.
+**Always append via shell redirection, never via Edit-style
+old-string/new-string anchors.** `log.md` grows between turns
+(other skills append too); anchoring on its current tail fails
+intermittently. The canonical idiom — used by every scientia skill
+that logs — is:
+
+```bash
+printf '%s\n' '- '$(date -u +%Y-%m-%dT%H:%M:%SZ)' — orchestrator — <event> — <tenant>/<change-id> — <details>' >> development/log.md
+```
+
+Substitute the skill name for `orchestrator` (e.g.
+`scientia-intent-spec`) when calling from a phase skill, and the
+same shape for `wiki/log.md` writes. This log is the orchestrator's
+audit trail and the canonical record of *why* the pipeline is where
+it is.
 
 ## Files in this skill
 

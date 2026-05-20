@@ -31,6 +31,39 @@ The Hermes dispatcher gives you, in order:
 `hermes kanban show <id>`, it does not exist for you. Do not consult
 external state.
 
+## Headless execution discipline
+
+You are spawned by the Hermes dispatcher via `hermes -p <profile> chat
+-q "work kanban task <id>"` with `stdin` closed. **There is no user
+on the other end of this turn.** Every prompt you "ask" simply ends
+the turn waiting for a reply that will never arrive, which the
+dispatcher then reaps as a crash — and respawns you into an identical
+loop.
+
+Concretely:
+
+- **Never ask clarifying questions of "the user".** No "Would you
+  like me to…", "Should I…", "Do you want…", "Let me know if…",
+  "Please confirm…", or any other phrasing that solicits a reply.
+- **Make the decision yourself, or block the task.** If you face
+  genuine ambiguity, choose the documented escape hatch: flip
+  `running → blocked` with a comment + handoff that names the
+  ambiguity, the options considered, and the recommended next step.
+  A human will read it via `hermes kanban show` and either unblock
+  with guidance or reassign. *Blocking is how you ask a question.*
+- **Do not offer menus of alternatives.** If you find yourself about
+  to type "I can do A, B, or C — which do you prefer?", you must
+  instead pick one (justify in a comment) or block (citing the
+  alternatives in the handoff).
+- **End the turn with an action, not a question.** Your final tool
+  call should be `hermes kanban complete` or `hermes kanban block`
+  on this task. If neither has been called, you have failed the
+  task — the dispatcher will time you out and crash-retry.
+
+This applies to *every* scientia profile (`implementer`, `reviewer`,
+`integrator`, `aggregator`) regardless of role. The role decides
+*what* you do; this discipline decides *how* you terminate.
+
 ## Reading the task body
 
 Every scientia task body follows this fixed structure. Read in order:

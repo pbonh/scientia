@@ -110,8 +110,8 @@ Capture the significant decisions named in `design.md`'s
 
 4. **Append to `development/log.md`** one line per ADR written:
 
-   ```markdown
-   - YYYY-MM-DDTHH:MM:SSZ — scientia-intent-adr — adr-drafted — <tenant>/<change-id> — adr=ADR-NNNN status=proposed
+   ```bash
+   printf '%s\n' '- YYYY-MM-DDTHH:MM:SSZ — scientia-intent-adr — adr-drafted — <tenant>/<change-id> — adr=ADR-NNNN status=proposed' >> development/log.md
    ```
 
 5. **Hand off.** Stage transitions to `adr`. Next recommended skill:
