@@ -60,6 +60,79 @@ class CheckHermesOnPathTests(unittest.TestCase):
             self.assertIn("hermes", reason.lower())
 
 
+def _write_hermes_config(dir_path: Path, max_concurrent_children: int | None) -> Path:
+    """Write a minimal ~/.hermes/config.yaml-shaped file. None omits the key."""
+    if max_concurrent_children is None:
+        delegation_block = "delegation:\n  model: ''\n"
+    else:
+        delegation_block = (
+            "delegation:\n"
+            "  model: ''\n"
+            f"  max_concurrent_children: {max_concurrent_children}\n"
+        )
+    text = (
+        "model:\n"
+        "  default: anything\n"
+        f"{delegation_block}"
+        "kanban:\n"
+        "  dispatch_in_gateway: true\n"
+    )
+    p = dir_path / "config.yaml"
+    p.write_text(text)
+    return p
+
+
+class CheckConcurrencyCapTests(unittest.TestCase):
+    def test_passes_when_host_value_matches_desired(self):
+        with TemporaryDirectory() as td:
+            cfg = _write_hermes_config(Path(td), 3)
+            self.assertIsNone(
+                emit.check_concurrency_cap(desired=3, hermes_config_path=cfg)
+            )
+
+    def test_refuses_when_host_value_differs(self):
+        with TemporaryDirectory() as td:
+            cfg = _write_hermes_config(Path(td), 5)
+            reason = emit.check_concurrency_cap(desired=3, hermes_config_path=cfg)
+            self.assertIsNotNone(reason)
+            self.assertIn("host=5", reason)
+            self.assertIn("desired=3", reason)
+            self.assertIn("hermes config set delegation.max_concurrent_children 3", reason)
+
+    def test_passes_when_hermes_config_missing(self):
+        # No ~/.hermes/config.yaml at all → defer to check_hermes_on_path.
+        cfg = Path("/nonexistent/.hermes/config.yaml")
+        self.assertIsNone(emit.check_concurrency_cap(desired=3, hermes_config_path=cfg))
+
+    def test_treats_absent_key_as_hermes_default_of_3(self):
+        with TemporaryDirectory() as td:
+            cfg = _write_hermes_config(Path(td), None)
+            # desired=3 matches hermes' built-in default → pass
+            self.assertIsNone(
+                emit.check_concurrency_cap(desired=3, hermes_config_path=cfg)
+            )
+            # desired=5 differs from hermes' default → refuse with host=3
+            reason = emit.check_concurrency_cap(desired=5, hermes_config_path=cfg)
+            self.assertIsNotNone(reason)
+            self.assertIn("host=3", reason)
+            self.assertIn("desired=5", reason)
+
+    def test_only_matches_key_under_delegation_block(self):
+        # `max_concurrent_children` in another (hypothetical) section must not
+        # be mistaken for the delegation value.
+        with TemporaryDirectory() as td:
+            cfg = Path(td) / "config.yaml"
+            cfg.write_text(
+                "other:\n"
+                "  max_concurrent_children: 99\n"
+                "delegation:\n"
+                "  max_concurrent_children: 3\n"
+            )
+            self.assertIsNone(
+                emit.check_concurrency_cap(desired=3, hermes_config_path=cfg)
+            )
+
+
 def _write_verify_report(dir_path: Path, ts: str, worst: str,
                          counts: dict) -> Path:
     """Write a verify-{ts}.md with frontmatter matching scientia conventions."""
@@ -225,6 +298,7 @@ class PreflightAggregatorTests(unittest.TestCase):
                                  {"critical": 0, "warning": 0, "suggestion": 0})
             processes = change / "processes.json"
             processes.write_text(json.dumps([{"kind": "gateway", "pid": 1}]))
+            hermes_cfg = _write_hermes_config(change, 3)
 
             with patch("shutil.which", return_value="/usr/local/bin/hermes"), \
                  patch("subprocess.run", return_value=subprocess.CompletedProcess(
@@ -234,6 +308,8 @@ class PreflightAggregatorTests(unittest.TestCase):
                     processes_json_path=processes,
                     block_on_severity="critical",
                     trunk="main",
+                    desired_concurrency=3,
+                    hermes_config_path=hermes_cfg,
                 )
         self.assertEqual(reasons, [])
 
@@ -246,6 +322,7 @@ class PreflightAggregatorTests(unittest.TestCase):
             # no verify report → gate fails
             processes = change / "processes.json"
             processes.write_text("[]")  # no gateway
+            hermes_cfg = _write_hermes_config(change, 3)
 
             with patch("shutil.which", return_value=None):  # no hermes
                 reasons = emit.preflight(
@@ -253,9 +330,38 @@ class PreflightAggregatorTests(unittest.TestCase):
                     processes_json_path=processes,
                     block_on_severity="critical",
                     trunk="main",
+                    desired_concurrency=3,
+                    hermes_config_path=hermes_cfg,
                 )
         # Expect ≥3 distinct failures (no hermes, no gateway, no verify, deprecated ADR)
         self.assertGreaterEqual(len(reasons), 3)
+
+    def test_concurrency_drift_surfaces_in_aggregated_reasons(self):
+        with TemporaryDirectory() as td:
+            change = Path(td)
+            (change / "adr").mkdir()
+            (change / "specs").mkdir()
+            _write_verify_report(change, "2026-05-20T1825", "clean",
+                                 {"critical": 0, "warning": 0, "suggestion": 0})
+            processes = change / "processes.json"
+            processes.write_text(json.dumps([{"kind": "gateway", "pid": 1}]))
+            hermes_cfg = _write_hermes_config(change, 7)  # host=7, desired=3
+
+            with patch("shutil.which", return_value="/usr/local/bin/hermes"), \
+                 patch("subprocess.run", return_value=subprocess.CompletedProcess(
+                     args=[], returncode=0, stdout="", stderr="")):
+                reasons = emit.preflight(
+                    change_dir=change,
+                    processes_json_path=processes,
+                    block_on_severity="critical",
+                    trunk="main",
+                    desired_concurrency=3,
+                    hermes_config_path=hermes_cfg,
+                )
+        self.assertEqual(len(reasons), 1)
+        self.assertIn("max_concurrent_children drift", reasons[0])
+        self.assertIn("host=7", reasons[0])
+        self.assertIn("desired=3", reasons[0])
 
 
 if __name__ == "__main__":

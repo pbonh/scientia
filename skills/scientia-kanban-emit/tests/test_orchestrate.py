@@ -102,6 +102,13 @@ def _seed_repo(root: Path, *, tenant="t", change_slug="2026-05-20-test",
         [{"kind": "gateway", "pid": 1}]
     ))
 
+    # ~/.hermes/config.yaml stub — host concurrency matches CONFIG's default (3)
+    (root / "hermes_config.yaml").write_text(
+        "model:\n  default: anything\n"
+        "delegation:\n  max_concurrent_children: 3\n"
+        "kanban:\n  dispatch_in_gateway: true\n"
+    )
+
     # spec.md
     sc_blocks = "\n\n".join(
         f"### Scenario: scenario {i+1}\n```gherkin\nGiven x\nWhen y\nThen z\n```"
@@ -160,6 +167,7 @@ class OrchestrateTests(unittest.TestCase):
                 handoff_path=self.handoff,
                 runner=runner,
                 dry_run=False,
+                hermes_config_path=self.root / "hermes_config.yaml",
             )
         # 1 parent + 2 children * 3 stages + 1 aggregator = 8
         self.assertEqual(result["tasks"], 8)
@@ -223,6 +231,7 @@ class OrchestrateTests(unittest.TestCase):
                 handoff_path=self.handoff,
                 runner=runner,
                 dry_run=False,
+                hermes_config_path=self.root / "hermes_config.yaml",
             )
         tasks_dir = self.root / "development" / "tasks" / "t" / "2026-05-20-test"
         self.assertTrue(tasks_dir.is_dir())
@@ -246,6 +255,7 @@ class OrchestrateTests(unittest.TestCase):
                 processes_json_path=self.root / "processes.json",
                 handoff_path=self.handoff,
                 runner=runner,
+                hermes_config_path=self.root / "hermes_config.yaml",
             )
         self.assertTrue(any("gateway" in r.lower() for r in ctx.exception.reasons))
 

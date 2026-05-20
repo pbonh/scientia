@@ -16,6 +16,11 @@ wiki:
 hermes:
   # Override per-repo if the host's kanban.db is project-specific.
   kanban_db: ~/.hermes/kanban.db
+  # Parallel batch size per delegate_task call. Mapped to hermes'
+  # delegation.max_concurrent_children. Default 3, min 1.
+  # Applied to ~/.hermes/config.yaml when scientia-kanban-init runs;
+  # scientia-kanban-emit refuses if the host drifts from this value.
+  max_concurrent_children: 3
   # Profile name overrides — leave blank to use defaults.
   profile_names:
     implementer: scientia-implementer

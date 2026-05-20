@@ -1,6 +1,6 @@
 ---
 name: scientia-kanban-init
-description: One-shot Hermes Kanban bootstrap for the host. Creates the four scientia agent profile directories via `hermes profile create`, writes their SOUL.md bodies from this skill's assets/profiles/, symlinks the scientia skills (kanban-worker, grill, …) into ~/.hermes/skills/ so emit's `--skill scientia-…` resolves, verifies the hermes CLI is on PATH and the kanban.db path declared in development/config.yaml is writable, and confirms the Hermes gateway is up. Run once per host (not per repo) on first scientia use, or whenever the user says "initialize Hermes". Idempotent — never overwrites a hand-edited SOUL.md or pre-existing skill symlink.
+description: One-shot Hermes Kanban bootstrap for the host. Creates the four scientia agent profile directories via `hermes profile create`, writes their SOUL.md bodies from this skill's assets/profiles/, symlinks the scientia skills (kanban-worker, grill, …) into ~/.hermes/skills/ so emit's `--skill scientia-…` resolves, verifies the hermes CLI is on PATH and the kanban.db path declared in development/config.yaml is writable, applies the per-repo `hermes.max_concurrent_children` cap to the host's `delegation.max_concurrent_children`, and confirms the Hermes gateway is up. Run once per host (not per repo) on first scientia use, or whenever the user says "initialize Hermes". Idempotent — never overwrites a hand-edited SOUL.md or pre-existing skill symlink.
 license: MIT
 metadata:
   bundle: scientia
@@ -86,7 +86,42 @@ Make this host ready to run the scientia kanban phase.
    it returns valid JSON (even if empty). If it errors, report and
    refuse to mark init complete.
 
-6. **Verify the Hermes gateway is running.** The kanban dispatcher —
+6. **Apply the concurrency cap.** Read `development/config.yaml` for
+   `hermes.max_concurrent_children` (default `3`). Refuse with a clear
+   message if the value is present but not a positive integer.
+
+   This value maps to Hermes' `delegation.max_concurrent_children`
+   (see https://hermes-agent.nousresearch.com/docs/guides/delegation-patterns#tuning-concurrency-and-depth
+   — "parallel batch size per `delegate_task` call", default 3, range >=1).
+
+   Check the host's current value by reading `~/.hermes/config.yaml`
+   directly (look for `max_concurrent_children:` under the `delegation:`
+   top-level block). If it differs from the desired value, apply with:
+
+   ```bash
+   hermes config set delegation.max_concurrent_children "$N"
+   ```
+
+   Then append to `development/log.md`:
+
+   ```
+   - YYYY-MM-DDTHH:MM:SSZ — scientia-kanban-init — concurrency-applied — — N=<N>
+   ```
+
+   When the host already matches, log `concurrency-already-set N=<N>`
+   and skip the write.
+
+   **Host-vs-repo scope.** `~/.hermes/config.yaml` is host-global;
+   `development/config.yaml` is per-repo. If you run scientia from
+   multiple repos with different `hermes.max_concurrent_children`
+   values, the most recent `scientia-kanban-init` (or manual
+   `hermes config set`) wins. `scientia-kanban-emit` will refuse a
+   repo whose value drifts from the host's setting, so the conflict
+   is always surfaced — but resolution is manual. If you edit
+   `hermes.max_concurrent_children` later, re-run `scientia-kanban-init`
+   to apply, or `scientia-kanban-emit` will refuse with the drift reason.
+
+7. **Verify the Hermes gateway is running.** The kanban dispatcher —
    the thing that polls `kanban.db` and spawns worker processes — only
    ticks while the gateway is up. This is the design today:
    `~/.hermes/config.yaml` sets `kanban.dispatch_in_gateway: true` with
@@ -122,13 +157,13 @@ Make this host ready to run the scientia kanban phase.
 
    Re-run `scientia-kanban-init` once the gateway is up.
 
-7. **Append to `development/log.md`**:
+8. **Append to `development/log.md`**:
 
    ```bash
-   printf '%s\n' '- YYYY-MM-DDTHH:MM:SSZ — scientia-kanban-init — host-ready — — profiles=4 kanban_db=<path>' >> development/log.md
+   printf '%s\n' '- YYYY-MM-DDTHH:MM:SSZ — scientia-kanban-init — host-ready — — profiles=4 kanban_db=<path> max_concurrent=<N>' >> development/log.md
    ```
 
-8. **Report ready.** The host is now ready to run
+9. **Report ready.** The host is now ready to run
    `scientia-kanban-emit` for any tenant.
 
 ## What this skill never does

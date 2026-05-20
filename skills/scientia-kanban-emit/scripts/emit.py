@@ -127,6 +127,57 @@ def check_hermes_on_path() -> Optional[str]:
     )
 
 
+def _read_hermes_max_concurrent_children(text: str) -> Optional[int]:
+    """Extract `delegation.max_concurrent_children` from a hermes config.yaml.
+
+    Scoped to the `delegation:` top-level block so we don't accidentally
+    match a similarly-named key in another section. Returns None when the
+    key is absent or its value is non-integer.
+    """
+    in_delegation = False
+    for line in text.splitlines():
+        if line and not line.startswith((" ", "\t")):
+            in_delegation = line.startswith("delegation:")
+            continue
+        if not in_delegation:
+            continue
+        m = re.match(r"\s+max_concurrent_children:\s*(-?\d+)\s*(?:#.*)?$", line)
+        if m:
+            return int(m.group(1))
+    return None
+
+
+def check_concurrency_cap(
+    *, desired: int, hermes_config_path: Path
+) -> Optional[str]:
+    """Refuse if hermes' `delegation.max_concurrent_children` differs from
+    the per-repo desired value.
+
+    Read-only: reads `~/.hermes/config.yaml` directly. When that file is
+    missing or the key is absent, treats the host as hermes' built-in
+    default (3) — matches the doc'd default at
+    hermes-agent.nousresearch.com/docs/guides/delegation-patterns.
+    """
+    try:
+        text = hermes_config_path.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        # No hermes config yet — check_hermes_on_path / init will cover it.
+        return None
+
+    host = _read_hermes_max_concurrent_children(text)
+    if host is None:
+        host = 3  # hermes' documented default when the key is absent
+
+    if host == desired:
+        return None
+
+    return (
+        f"delegation.max_concurrent_children drift: host={host} desired={desired}. "
+        f"Fix: `hermes config set delegation.max_concurrent_children {desired}` "
+        f"(or re-run scientia-kanban-init)."
+    )
+
+
 def check_verify_severity(change_dir: Path, *, block_on: str) -> Optional[str]:
     """Refuse if the latest `verify-*.md` has worst_severity >= block_on.
 
@@ -763,6 +814,7 @@ def orchestrate(
     dry_run: bool = False,
     only_spec: Optional[str] = None,
     trunk: str = "main",
+    hermes_config_path: Optional[Path] = None,
 ) -> dict:
     """Full per-change emit flow. Returns a summary dict.
 
@@ -782,6 +834,9 @@ def orchestrate(
     change_dir = repo_root / "openspec" / "changes" / f"{tenant}-{change_slug}"
 
     block_on = config.get("verify", {}).get("block_on_severity", "critical")
+    desired_concurrency = config.get("hermes", {}).get("max_concurrent_children", 3)
+    if hermes_config_path is None:
+        hermes_config_path = Path.home() / ".hermes" / "config.yaml"
     if dry_run:
         # Inspecting what would emit doesn't require a running gateway or a
         # working hermes CLI on PATH. Other gates (verify, ADR, on-trunk)
@@ -800,6 +855,8 @@ def orchestrate(
             processes_json_path=processes_json_path,
             block_on_severity=block_on,
             trunk=trunk,
+            desired_concurrency=desired_concurrency,
+            hermes_config_path=hermes_config_path,
         )
     if reasons:
         raise PreflightRefused(reasons)
@@ -1111,6 +1168,8 @@ def preflight(
     processes_json_path: Path,
     block_on_severity: str,
     trunk: str,
+    desired_concurrency: int,
+    hermes_config_path: Path,
 ) -> List[str]:
     """Run every preflight gate and collect refusal reasons.
 
@@ -1120,6 +1179,10 @@ def preflight(
     for reason in (
         check_hermes_on_path(),
         check_gateway(processes_json_path),
+        check_concurrency_cap(
+            desired=desired_concurrency,
+            hermes_config_path=hermes_config_path,
+        ),
         check_verify_severity(change_dir, block_on=block_on_severity),
         check_adr_status(change_dir),
         check_spec_on_trunk(change_dir, trunk=trunk),
@@ -1232,8 +1295,13 @@ def main(argv: Optional[List[str]] = None) -> int:
                 "require_approval_tenants": [],
             },
             "verify": {"block_on_severity": "critical"},
+            "hermes": {"max_concurrent_children": 3},
             **config,
         }
+    else:
+        # Ensure hermes.max_concurrent_children has a default even when the
+        # rest of the config is present — older bundles' configs predate the key.
+        config.setdefault("hermes", {}).setdefault("max_concurrent_children", 3)
 
     try:
         result = orchestrate(
