@@ -71,7 +71,7 @@ git clone https://github.com/pbonh/scientia.git ~/.agents/skills/scientia
 That is the whole install step. Every Agent Skills client tested
 (OpenCode, Claude Code, Cursor) discovers `SKILL.md` files under
 `~/.agents/skills/` recursively, so the 22 bundled skills become
-available immediately. See [INSTALL.md](INSTALL.md) for the
+available immediately. See [docs/INSTALL.md](docs/INSTALL.md) for the
 fine print (client-specific paths, Hermes profile install, upgrade,
 uninstall).
 
