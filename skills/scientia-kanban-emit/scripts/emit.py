@@ -86,12 +86,20 @@ def check_gateway(processes_json_path: Path) -> Optional[str]:
     Without a gateway, the kanban dispatcher never ticks, so emitted tasks
     would sit in `todo` forever.
     """
+    start_hint = (
+        "Recommended: `hermes gateway install && hermes gateway start` "
+        "(installs and starts the launchd/systemd service). "
+        "Alternatives: `hermes gateway run` (foreground, for WSL/Docker/Termux) "
+        "or `nohup hermes gateway start > ~/.hermes/logs/gateway.log 2>&1 &` "
+        "(no-service-manager fallback; does not survive reboot)."
+    )
+
     try:
         raw = processes_json_path.read_text(encoding="utf-8")
     except FileNotFoundError:
         return (
             f"Hermes gateway is not running: {processes_json_path} not found. "
-            "Start it with: nohup hermes gateway start > ~/.hermes/logs/gateway.log 2>&1 &"
+            + start_hint
         )
 
     try:
@@ -105,7 +113,7 @@ def check_gateway(processes_json_path: Path) -> Optional[str]:
 
     return (
         "Hermes gateway is not running: no `kind: gateway` entry in "
-        f"{processes_json_path}. Start it with: nohup hermes gateway start &"
+        f"{processes_json_path}. " + start_hint
     )
 
 

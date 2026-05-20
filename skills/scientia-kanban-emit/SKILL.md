@@ -27,14 +27,17 @@ Refuse to emit if any of:
 - The Hermes gateway is not running (no `gateway` process in
   `~/.hermes/processes.json`). Without it the dispatcher never ticks,
   so emitted tasks would sit in `todo` forever. Refuse and tell the
-  user to start it themselves:
+  user to start it themselves. Recommended:
 
   ```bash
-  nohup hermes gateway start > ~/.hermes/logs/gateway.log 2>&1 &
+  hermes gateway install   # one-time, writes launchd/systemd service
+  hermes gateway start     # starts the service
   ```
 
-  Same gate as `scientia-kanban-init` step 6 — scientia never spawns
-  the gateway, it only refuses to proceed without one.
+  Alternatives: `hermes gateway run` (foreground; recommended for
+  WSL/Docker/Termux) or `nohup hermes gateway start > ~/.hermes/logs/gateway.log 2>&1 &`
+  (no-service-manager fallback; doesn't survive reboot). Full guidance
+  in `scientia-kanban-init` step 6.
 - An ADR cited by the spec is `deprecated` or `superseded` without a
   successor — emission would be against a stale decision.
 

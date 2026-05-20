@@ -53,20 +53,37 @@ Make this host ready to run the scientia kanban phase.
 
 6. **Verify the Hermes gateway is running.** The kanban dispatcher —
    the thing that polls `kanban.db` and spawns worker processes — only
-   ticks while `hermes gateway start` is up. This is the design today:
+   ticks while the gateway is up. This is the design today:
    `~/.hermes/config.yaml` sets `kanban.dispatch_in_gateway: true` with
    a `dispatch_interval_seconds: 60` cadence, and `hermes kanban
    daemon` is deprecated in favor of the gateway.
 
    Read `~/.hermes/processes.json`. If it contains no entry with
-   `kind: gateway` (or equivalent), **refuse to mark init complete**.
-   Tell the user to start the gateway themselves — scientia does not
-   spawn long-running processes. For example:
+   `kind: gateway` (or equivalent), **refuse to mark init complete**
+   and tell the user to start it themselves (scientia does not spawn
+   long-running processes). The recommended path uses Hermes' built-in
+   service installer:
 
    ```bash
-   nohup hermes gateway start > ~/.hermes/logs/gateway.log 2>&1 &
-   # or wrap in a launchd plist for persistence across reboots
+   hermes gateway install   # one-time: writes the launchd (macOS) /
+                            # systemd user (Linux) service definition
+   hermes gateway start     # starts the now-installed service
+   hermes gateway status    # confirms it's up
    ```
+
+   The service survives logout/reboot and is restarted automatically
+   by `hermes update`. Use `hermes gateway {stop,restart,uninstall}`
+   to manage it after.
+
+   Alternatives — only when a service manager isn't available or
+   appropriate:
+
+   - `hermes gateway run` — foreground process, documented as the
+     recommended option for WSL, Docker, and Termux. Common pattern:
+     run it inside `tmux`/`screen`.
+   - `nohup hermes gateway start > ~/.hermes/logs/gateway.log 2>&1 &`
+     — manual backgrounding. Works, but doesn't survive logout/reboot
+     and doesn't auto-restart on crash.
 
    Re-run `scientia-kanban-init` once the gateway is up.
 
