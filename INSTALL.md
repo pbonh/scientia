@@ -1,105 +1,101 @@
 # Installing scientia
 
-scientia is an installable bundle of Agent Skills. The bundle ships skills
-under `skills/`, Hermes profiles under
-`skills/scientia-kanban-init/assets/profiles/`, and templates under
-`skills/scientia-wiki-init/assets/templates/`. Installation has two
-distinct steps:
+scientia is a bundle of [Agent Skills](https://agentskills.io). It
+installs by cloning into the user-level skills directory every tested
+client discovers — `~/.agents/skills/`. There is no install script.
 
-1. **Place the skills where your Agent Skills client can discover them.**
-   This is a per-host concern handled by `install.sh`.
-2. **Scaffold the target repository's `raw/`, `wiki/`, `development/`, and
-   `openspec/` directories.** This is a per-repo concern handled by
-   `scientia-wiki-init` (which runs the first time you invoke the
-   `scientia` orchestrator in a target repo).
-
-## Quick start
+## Install
 
 ```bash
-git clone https://github.com/<you>/scientia.git
-cd scientia
-./install.sh /path/to/target/repo
+git clone https://github.com/pbonh/scientia.git ~/.agents/skills/scientia
 ```
 
-Then in the target repo, activate the `scientia` skill and say:
+That is the entire install step. The 22 skills (and the 4 Hermes
+profiles bundled inside `scientia-kanban-init/assets/profiles/`)
+become discoverable by any client that walks
+`~/.agents/skills/` recursively for `SKILL.md` files. Tested clients:
+OpenCode, Claude Code, Cursor.
 
-> *"Initialize this repository for scientia."*
-
-The orchestrator detects no wiki / openspec / development directories
-exist and recommends `scientia-wiki-init`, which scaffolds everything.
-
-## Per-client install paths
-
-`install.sh` accepts `--client <name>` to choose where to place skills.
-Supported clients and their default paths (declared in `scientia.json`):
-
-| Client | Default install path inside target repo |
-|---|---|
-| `opencode` | `.opencode/skills/`, falling back to `.agents/skills/` |
-| `claude-code` | `.claude/skills/` |
-| `cursor` | `.cursor/skills/` |
-| `generic` (default) | `.agents/skills/` |
-
-Override with `--skills-path <abs-path>`. The Hermes profiles always go to
-`~/.hermes/profiles/` regardless of client (Hermes is host-scoped, not
-repo-scoped).
+If a client looks at a different path (e.g., `.opencode/skills/`,
+`.claude/skills/`), point it at `~/.agents/skills/scientia/skills/`
+or symlink:
 
 ```bash
-./install.sh /path/to/target/repo --client opencode
-./install.sh /path/to/target/repo --skills-path /custom/skills/dir
+mkdir -p ~/.opencode
+ln -s ~/.agents/skills ~/.opencode/skills
 ```
 
-## What install.sh does
+## Verify
 
-1. Read `scientia.json` to enumerate the skills and profiles to install.
-2. Resolve the target skill directory based on `--client` or
-   `--skills-path`.
-3. Copy each `skills/<skill>/` directory into the target skill directory.
-4. Copy each profile from `skills/scientia-kanban-init/assets/profiles/`
-   into `~/.hermes/profiles/` (unless `--no-profiles`).
-5. Write a tiny breadcrumb to `<target-repo>/.scientia-install.json`
-   recording the bundle version installed, so `--upgrade` knows what to do.
+Activate the `scientia` skill in your client of choice:
 
-`install.sh` is idempotent. Re-running it copies any missing files and
-does not overwrite skills the user has hand-edited (a warning is printed
-and the file is left alone). To force overwrite, pass `--force`.
+> *"Use the scientia skill."*
+
+The orchestrator reads on-disk state and, for an empty repo, will
+recommend `scientia-wiki-init` as the next action. That skill
+scaffolds `raw/`, `wiki/`, `development/`, and `openspec/` in the
+target repository.
+
+## Hermes profiles
+
+The four scientia agent profiles
+(`scientia-implementer`, `scientia-reviewer`, `scientia-integrator`,
+`scientia-aggregator`) are bundled at:
+
+```
+~/.agents/skills/scientia/skills/scientia-kanban-init/assets/profiles/
+```
+
+They are **not** copied to `~/.hermes/profiles/` at install time —
+the `scientia-kanban-init` skill copies them on its first run for a
+host. Activating the orchestrator and saying *"initialize Hermes"*
+triggers it; the skill is idempotent and refuses to overwrite
+hand-edited profiles.
+
+If you prefer to copy them yourself:
+
+```bash
+mkdir -p ~/.hermes/profiles
+cp ~/.agents/skills/scientia/skills/scientia-kanban-init/assets/profiles/*.md ~/.hermes/profiles/
+```
 
 ## Upgrade
 
 ```bash
-cd /path/to/scientia
+cd ~/.agents/skills/scientia
 git pull
-./install.sh /path/to/target/repo --upgrade
 ```
 
-`--upgrade` reads the breadcrumb at `<target-repo>/.scientia-install.json`
-to determine the previously installed version, then runs any matching
-migration scripts from `skills/scientia/scripts/migrations/`. Migrations
-are append-only and idempotent. Each migration appends a line to
-`<target-repo>/development/log.md`.
-
-In-flight changes (those whose `manifests/.../core.md` was bound under the
-previous `scientia_schema_version`) continue to use the old schema until
-archived; only new changes use the new schema.
+If a schema migration is required (rare; only when
+`scientia_schema_version` changes), `verify_all.py` will report it as
+a CRITICAL finding pointing at the appropriate migration script in
+`skills/scientia/scripts/migrations/`. v0.1 has no migrations.
 
 ## Uninstall
 
 ```bash
-./install.sh /path/to/target/repo --uninstall
+rm -rf ~/.agents/skills/scientia
 ```
 
-Removes only files that `install.sh` placed. Does not touch `raw/`,
-`wiki/`, `development/`, or `openspec/` (the repo's data). To fully
-remove scientia, you can additionally delete those directories yourself.
-
-## Verifying an install
-
-After install, in the target repo:
+Existing target repos retain their `raw/`, `wiki/`, `development/`,
+and `openspec/` directories — scientia owns no state outside the
+bundle and the per-repo scaffold. Hermes profiles installed by
+`scientia-kanban-init` remain in `~/.hermes/profiles/`; remove them
+by hand if you no longer want them:
 
 ```bash
-/path/to/scientia/skills/scientia/scripts/verify_all.py
+rm ~/.hermes/profiles/scientia-{implementer,reviewer,integrator,aggregator}.md
 ```
 
-This is the same script that scientia's CI integration uses. On a freshly
-initialized repo with no changes in flight, it exits 0 with an empty
-report.
+## Why a clone install, not a copy install
+
+The bundle layout is spec-conformant per skill. Cloning the whole
+repo to a single discoverable directory and letting the client walk
+it recursively gives:
+
+- **One command install.** No script, no flags, no per-client paths.
+- **Trivial upgrade.** `git pull`.
+- **Reviewable provenance.** The bundle is the git history; the user
+  can audit `git log` to see what changed since their last `pull`.
+- **No skill duplication.** Every client points at the same
+  source-of-truth directory; if you fork, you fork once.

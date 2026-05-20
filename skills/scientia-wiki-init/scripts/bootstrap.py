@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import argparse
 import datetime as dt
+import json
 import os
 import shutil
 import sys
@@ -18,6 +19,16 @@ from pathlib import Path
 
 SKILL_ROOT = Path(__file__).resolve().parent.parent  # skills/scientia-wiki-init/
 TEMPLATE_ROOT = SKILL_ROOT / "assets" / "templates"
+BUNDLE_ROOT = SKILL_ROOT.parent.parent                # the scientia bundle root
+
+
+def detect_bundle_version() -> str:
+    """Read scientia.json at the bundle root and return its version."""
+    manifest = BUNDLE_ROOT / "scientia.json"
+    try:
+        return json.loads(manifest.read_text(encoding="utf-8"))["version"]
+    except Exception:
+        return "unknown"
 
 # Directories to create (empty if no template).
 DIRS = [
@@ -62,8 +73,11 @@ def substitute(text: str, mapping: dict[str, str]) -> str:
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--repo", default=os.getcwd())
-    ap.add_argument("--bundle-version", default="0.1.0")
+    ap.add_argument("--bundle-version", default=None,
+                    help="Override bundle version (default: read from scientia.json)")
     args = ap.parse_args()
+    if args.bundle_version is None:
+        args.bundle_version = detect_bundle_version()
 
     repo = Path(args.repo).resolve()
     repo_name = repo.name

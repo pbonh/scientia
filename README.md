@@ -65,20 +65,23 @@ dependencies are [OpenSpec](https://github.com/intent-driven-dev/openspec) and
 ## Install
 
 ```bash
-git clone https://github.com/<you>/scientia.git
-cd scientia
-./install.sh /path/to/target/repo
+git clone https://github.com/pbonh/scientia.git ~/.agents/skills/scientia
 ```
 
-See [INSTALL.md](INSTALL.md) for per-client details (OpenCode, Claude Code,
-Cursor, generic Agent Skills clients) and for the upgrade path.
+That is the whole install step. Every Agent Skills client tested
+(OpenCode, Claude Code, Cursor) discovers `SKILL.md` files under
+`~/.agents/skills/` recursively, so the 22 bundled skills become
+available immediately. See [INSTALL.md](INSTALL.md) for the
+fine print (client-specific paths, Hermes profile install, upgrade,
+uninstall).
 
-After install, run the orchestrator in the target repo:
+Then, in any target repo, activate the orchestrator:
 
 > *"Use the scientia skill."*
 
 The orchestrator detects pipeline state from on-disk artifacts and
-recommends the next action.
+recommends the next action — usually `scientia-wiki-init` on a fresh
+repo.
 
 ## Concurrency
 
@@ -99,8 +102,9 @@ tenants run in parallel. Change-ids are `<tenant>/<date>-<slug>/` across
 Each repo records `scientia_schema_version` in `development/config.yaml`;
 each `manifests/.../core.md` frontmatter pins the schema it was bound
 against. In-flight changes keep their schema across bundle upgrades;
-new changes adopt the new schema. Run `./install.sh --upgrade
-/path/to/target/repo` to apply migrations.
+new changes adopt the new schema. Upgrade scientia by
+`cd ~/.agents/skills/scientia && git pull`; `verify_all.py` will flag
+any migration required.
 
 ## CI
 
@@ -108,7 +112,7 @@ A single platform-agnostic gate is shipped at
 `skills/scientia/scripts/verify_all.py`. Wire it into any CI:
 
 ```yaml
-- run: /path/to/scientia/skills/scientia/scripts/verify_all.py
+- run: ~/.agents/skills/scientia/skills/scientia/scripts/verify_all.py
 ```
 
 It walks all in-flight manifests, runs wiki-lint + OpenSpec verify +
