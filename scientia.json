@@ -1,0 +1,54 @@
+{
+  "$schema": "https://agentskills.io/schemas/bundle.json",
+  "name": "scientia",
+  "version": "0.1.0",
+  "scientia_schema_version": 1,
+  "description": "Software R&D pipeline as Agent Skills: knowledge graph -> intent-driven change -> Hermes Kanban execution -> wiki ingest.",
+  "license": "MIT",
+  "dependencies": {
+    "openspec": ">=0.1",
+    "hermes": ">=1.0"
+  },
+  "skills": [
+    "scientia",
+    "scientia-grill",
+    "scientia-wiki-init",
+    "scientia-wiki-ingest",
+    "scientia-wiki-strategy",
+    "scientia-wiki-grill",
+    "scientia-wiki-lint",
+    "scientia-wiki-bind",
+    "scientia-intent-proposal",
+    "scientia-intent-spec",
+    "scientia-intent-design",
+    "scientia-intent-adr",
+    "scientia-intent-tasks",
+    "scientia-intent-verify",
+    "scientia-kanban-init",
+    "scientia-kanban-emit",
+    "scientia-kanban-worker",
+    "scientia-kanban-status",
+    "scientia-kanban-archive",
+    "scientia-ingest-evidence",
+    "scientia-ingest-synthesize",
+    "scientia-ingest-archive"
+  ],
+  "profiles": [
+    "scientia-implementer",
+    "scientia-reviewer",
+    "scientia-integrator",
+    "scientia-aggregator"
+  ],
+  "client_skill_paths": {
+    "opencode": [".opencode/skills", ".agents/skills"],
+    "claude-code": [".claude/skills"],
+    "cursor": [".cursor/skills"],
+    "generic": [".agents/skills"]
+  },
+  "default_target_layout": {
+    "raw": "raw/",
+    "wiki": "wiki/",
+    "development": "development/",
+    "openspec": "openspec/"
+  }
+}
