@@ -593,50 +593,64 @@ fan-out wrapper needed.
 
 ```bash
 $ hermes kanban create \
-    --id t_refundsA_impl \
+    --idempotency-key refunds:ADR-0004:full-refund-within-window:HASHA:impl \
     --tenant billing \
     --assignee scientia-implementer \
-    --workspace git:/home/marcus/work/billing \
+    --workspace dir:/home/marcus/work/billing \
     --skill scientia-kanban-worker \
     --skill scientia-grill \
-    --title "Refunds — full-refund-within-window (impl)" \
-    --body-file /tmp/scientia-emit-XXXX.md
+    --body "$(cat /tmp/scientia-emit-XXXX.md)" \
+    "Refunds — full-refund-within-window (impl)"
+# → t_refundsA_impl
 
 $ hermes kanban create \
-    --id t_refundsA_review \
+    --idempotency-key refunds:ADR-0004:full-refund-within-window:HASHA:review \
     --tenant billing \
     --assignee scientia-reviewer \
-    --workspace git:/home/marcus/work/billing \
-    --depends-on t_refundsA_impl \
+    --workspace dir:/home/marcus/work/billing \
+    --parent t_refundsA_impl \
     --skill scientia-kanban-worker \
     --skill scientia-grill \
-    --title "Refunds — full-refund-within-window (review)" \
-    --body-file /tmp/scientia-emit-XXXX.md
+    --body "$(cat /tmp/scientia-emit-XXXX.md)" \
+    "Refunds — full-refund-within-window (review)"
+# → t_refundsA_review
 
 $ hermes kanban create \
-    --id t_refundsA_integrate \
+    --idempotency-key refunds:ADR-0004:full-refund-within-window:HASHA:integrate \
     --tenant billing \
     --assignee scientia-integrator \
-    --workspace git:/home/marcus/work/billing \
-    --depends-on t_refundsA_review \
+    --workspace dir:/home/marcus/work/billing \
+    --parent t_refundsA_review \
     --skill scientia-kanban-worker \
     --skill scientia-grill \
-    --title "Refunds — full-refund-within-window (integrate)" \
-    --body-file /tmp/scientia-emit-XXXX.md
+    --body "$(cat /tmp/scientia-emit-XXXX.md)" \
+    "Refunds — full-refund-within-window (integrate)"
+# → t_refundsA_integrate
 
 # ... repeated for the other three scenarios ...
 
-# Aggregator (per spec):
+# Aggregator (per spec) — one --parent per terminal stage:
 $ hermes kanban create \
-    --id t_refundsA_agg \
+    --idempotency-key refunds:ADR-0004:HASH:aggregator \
     --tenant billing \
     --assignee scientia-aggregator \
-    --workspace git:/home/marcus/work/billing \
-    --depends-on t_refundsA_integrate,t_refundsB_integrate,t_refundsC_integrate,t_refundsD_integrate \
+    --workspace dir:/home/marcus/work/billing \
+    --parent t_refundsA_integrate \
+    --parent t_refundsB_integrate \
+    --parent t_refundsC_integrate \
+    --parent t_refundsD_integrate \
     --skill scientia-kanban-worker \
-    --title "Refunds — aggregator" \
-    --body-file /tmp/scientia-emit-XXXX.md
+    --body "$(cat /tmp/scientia-emit-XXXX.md)" \
+    "Refunds — aggregator"
+# → t_refundsA_agg
 ```
+
+Note: `--parent` is repeatable and acts as a dependency edge (the
+dispatcher promotes `todo → ready` only after all parents reach `done`).
+There is no `--depends-on` flag; that name appeared in earlier scientia
+drafts and never matched the actual Hermes CLI. Likewise the title is
+**positional** (last argument), `--body` is inline only (no
+`--body-file`), and the dedup flag is `--idempotency-key` (not `--id`).
 
 Each task body contains: `@wiki-spec: refunds`, `## Goal`,
 `## Acceptance Criteria`, `## Scenario` (verbatim Gherkin),

@@ -309,19 +309,23 @@ aggregator task is created with `--require-approval`:
 
 ```bash
 $ hermes kanban create \
-    --id t_stepup_agg \
+    --idempotency-key step-up:ADR-0007:HASH:aggregator \
     --tenant identity \
     --assignee scientia-aggregator \
-    --workspace git:/home/devon/work/identity-platform \
-    --depends-on t_stepupA_integrate,t_stepupB_integrate,...,t_stepupE_integrate \
+    --workspace dir:/home/devon/work/identity-platform \
+    --parent t_stepupA_integrate \
+    --parent t_stepupB_integrate \
+    --parent t_stepupC_integrate \
+    --parent t_stepupD_integrate \
+    --parent t_stepupE_integrate \
     --skill scientia-kanban-worker \
-    --require-approval \
-    --title "Step-up auth — aggregator (human-in-loop)" \
-    --body-file /tmp/scientia-emit-XXXX.md
+    --triage \
+    --body "$(cat /tmp/scientia-emit-XXXX.md)" \
+    "Step-up auth — aggregator (human-in-loop)"
 ```
 
-The `--require-approval` flag tells Hermes to surface the
-aggregator for human approval before it can mark the spec as
+The `--triage` flag parks the task for human approval before it can
+mark the spec as
 shipped. This is the P5 difference from the billing emit.
 
 Total tasks: 16 (5 × 3 + 1 aggregator).

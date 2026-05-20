@@ -126,23 +126,32 @@ Refuse to emit if any of:
    - `title` is **positional** (last arg). There is no `--title` flag.
    - `--body` is **inline only**. Read the prepared body tmpfile with
      `"$(cat …)"` — there is no `--body-file`.
-   - Child tasks link to the parent via `--parent <parent-id>` on the
-     `create` call (repeatable).
-   - Pipeline stage dependencies are added *after* creation, not on
-     `create`: `hermes kanban link <previous-stage-id> <new-id>`.
-     (There is no `--depends-on` flag on `create`.)
+   - Tasks link to dependencies via `--parent <id>` on the `create` call
+     (repeatable). In Hermes, `--parent` *is* the dependency edge — the
+     dispatcher promotes `todo → ready` only after all `--parent` tasks
+     reach `done`. Use it for both hierarchy (parent → child) and pipeline
+     stages (impl → review → integrate). There is no `--depends-on` flag.
+   - `hermes kanban link <parent-id> <child-id>` adds a dependency *after*
+     creation; the `--parent` shortcut on `create` avoids the extra call
+     in the common case.
    - For pattern P5 ("human-in-loop"), the final approval task is
      emitted with `--triage` (parks the task for a human specifier to
      promote it). There is no `--require-approval` flag.
    - **Absolute workspace paths only** (confused-deputy guard).
    - `--tenant` is the bounded-context slug, always.
 
-6. **Re-emit semantics.** If a task with the same idempotency key
-   already exists:
-   - Same triple → update the task body in place (refresh glossary,
-     task description), leave id stable.
-   - Edited scenario → new sha → new child key → new child task; old
-     child closed with a `kanban_comment` pointing forward.
+6. **Re-emit semantics.** Hermes' `create --idempotency-key` returns the
+   existing task id when a non-archived task with that key already
+   exists, but it does **not** update the body / title / assignee —
+   there is no `kanban update` verb. So:
+
+   - Same triple → `create` is a no-op aside from returning the id; if
+     the freshly-computed body differs from what's on Hermes (e.g.
+     glossary was refreshed by a new manifest bind), `emit.py` issues
+     `hermes kanban comment <id> --body "refreshed-at: <ts>\n\n<body>"`
+     so the latest content is in the comment thread.
+   - Edited scenario → new sha → new child key → new child task; the
+     old child stays closed (`hermes kanban archive` is up to you).
    - New ADR id (supersession) → new parent key + new child keys →
      fresh task tree; old tree closed.
    - Renamed slug → fresh task tree.
@@ -188,19 +197,21 @@ Refuse to emit if any of:
 - Archives tasks. That is `scientia-kanban-archive` (or
   `scientia-ingest-archive` at change end).
 
-## TODO (separate change)
+## Running
 
-`scripts/emit.py` is referenced in the **Helpers** section above but
-not yet written — only `scripts/idempotency_key.py` exists. Until
-`emit.py` lands, this SKILL.md procedure is executed by the model
-each run, which is exactly how a `--body-file` flag that doesn't exist
-in Hermes 0.12.0 shipped (and then had to be improvised around at
-runtime — see `~/.pi/sessions/2026-05-20T20-25-03-724Z_*.jsonl`).
+Prefer the script over the procedure above when possible — the script
+owns preflight gates, pattern selection, body construction, the
+`hermes kanban create` calls (with the verified CLI shape), the
+re-emit refresh-comment, the `## Kanban Tasks` writeback, the per-task
+index entries, and the `development/log.md` append:
 
-Once `scripts/emit.py` is implemented it should own: preflight gates,
-pattern selection, body construction, `hermes kanban create` +
-`hermes kanban link` calls, `## Kanban Tasks` writeback, and the
-`development/log.md` append. The SKILL.md procedure can then collapse
-to "run `scripts/emit.py --change <id>`" and CLI flags live in one
-tested place. Until then, keep the CLI block above verbatim accurate
-against `hermes kanban create --help`.
+```bash
+python3 skills/scientia-kanban-emit/scripts/emit.py \
+    --change <tenant>/<change-slug> \
+    [--only-spec <capability>] \
+    [--dry-run]
+```
+
+The model executes the prose procedure only when the script is
+unavailable. Tests live under `skills/scientia-kanban-emit/tests/`
+(`python3 -m unittest discover` from the skill directory).
