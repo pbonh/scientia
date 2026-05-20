@@ -24,6 +24,17 @@ Refuse to emit if any of:
   feature branch that has not merged to trunk. The sha256 over a
   moving spec body would produce a meaningless idempotency key.
 - The Hermes CLI is not on PATH.
+- The Hermes gateway is not running (no `gateway` process in
+  `~/.hermes/processes.json`). Without it the dispatcher never ticks,
+  so emitted tasks would sit in `todo` forever. Refuse and tell the
+  user to start it themselves:
+
+  ```bash
+  nohup hermes gateway start > ~/.hermes/logs/gateway.log 2>&1 &
+  ```
+
+  Same gate as `scientia-kanban-init` step 6 — scientia never spawns
+  the gateway, it only refuses to proceed without one.
 - An ADR cited by the spec is `deprecated` or `superseded` without a
   successor — emission would be against a stale decision.
 
@@ -44,8 +55,9 @@ Refuse to emit if any of:
    from the change's `adr/`):
    - `accepted` → **P2 pipeline** (`implementer → reviewer →
      integrator`)
-   - `proposed` → **P5 human-in-loop** (same P2 plus a final
-     unassigned approval task with `--require-approval`)
+   - `proposed` → **P5 human-in-loop** (same P2 plus a final approval
+     task emitted with `--triage` so a human specifier promotes it
+     before the rest of the pipeline runs)
    - multiple specs in this change → wrap the whole emit in a **P1
      fan-out** parent
    - reviewer-agreement-matters override (per
@@ -95,23 +107,33 @@ Refuse to emit if any of:
    inlines the full `## Implementation Checklist` from `tasks.md`,
    not just the per-scenario subset. Assignee: `scientia-aggregator`.
 
-5. **Emit via the Hermes CLI.** For each task, in dependency order:
+5. **Emit via the Hermes CLI.** For each task, in dependency order
+   (flags verified against `hermes kanban create --help` on Hermes
+   Agent v0.12.0):
 
    ```bash
    hermes kanban create \
-     --id "$IDEMPOTENCY_KEY_SHORT" \
+     --idempotency-key "$IDEMPOTENCY_KEY_SHORT" \
      --tenant "$TENANT" \
      --assignee "$PROFILE" \
      --workspace "$KIND:$ABS_PATH" \
      --skill scientia-kanban-worker \
      --skill scientia-grill \
-     --title "$TITLE" \
-     --body-file "$BODY_TMPFILE" \
-     [--require-approval]               # when pattern == P5
+     --body "$(cat "$BODY_TMPFILE")" \
+     "$TITLE"
    ```
 
-   - Child tasks link to the parent via `--parent <parent-id>`.
-   - Pipeline stages link via `--depends-on <previous-stage-id>`.
+   - `title` is **positional** (last arg). There is no `--title` flag.
+   - `--body` is **inline only**. Read the prepared body tmpfile with
+     `"$(cat …)"` — there is no `--body-file`.
+   - Child tasks link to the parent via `--parent <parent-id>` on the
+     `create` call (repeatable).
+   - Pipeline stage dependencies are added *after* creation, not on
+     `create`: `hermes kanban link <previous-stage-id> <new-id>`.
+     (There is no `--depends-on` flag on `create`.)
+   - For pattern P5 ("human-in-loop"), the final approval task is
+     emitted with `--triage` (parks the task for a human specifier to
+     promote it). There is no `--require-approval` flag.
    - **Absolute workspace paths only** (confused-deputy guard).
    - `--tenant` is the bounded-context slug, always.
 
@@ -157,7 +179,28 @@ Refuse to emit if any of:
 - Edits spec bodies (except the auto-generated `## Kanban Tasks`
   section). The sha256 hash deliberately excludes that section.
 - Mutates `tasks.md`. The apply phase owns `tasks.md`.
-- Spawns workers. The Hermes dispatcher does that on its 60-second
-  tick.
+- Spawns workers. That is the gateway-hosted dispatcher's job; emit
+  only writes rows to `kanban.db`. If the gateway is down the
+  preflight refuses, so emit never leaves orphan rows for a missing
+  dispatcher.
+- Starts the Hermes gateway. The user owns that process (see
+  `scientia-kanban-init` step 6).
 - Archives tasks. That is `scientia-kanban-archive` (or
   `scientia-ingest-archive` at change end).
+
+## TODO (separate change)
+
+`scripts/emit.py` is referenced in the **Helpers** section above but
+not yet written — only `scripts/idempotency_key.py` exists. Until
+`emit.py` lands, this SKILL.md procedure is executed by the model
+each run, which is exactly how a `--body-file` flag that doesn't exist
+in Hermes 0.12.0 shipped (and then had to be improvised around at
+runtime — see `~/.pi/sessions/2026-05-20T20-25-03-724Z_*.jsonl`).
+
+Once `scripts/emit.py` is implemented it should own: preflight gates,
+pattern selection, body construction, `hermes kanban create` +
+`hermes kanban link` calls, `## Kanban Tasks` writeback, and the
+`development/log.md` append. The SKILL.md procedure can then collapse
+to "run `scripts/emit.py --change <id>`" and CLI flags live in one
+tested place. Until then, keep the CLI block above verbatim accurate
+against `hermes kanban create --help`.

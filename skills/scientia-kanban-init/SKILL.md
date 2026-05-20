@@ -51,13 +51,32 @@ Make this host ready to run the scientia kanban phase.
    it returns valid JSON (even if empty). If it errors, report and
    refuse to mark init complete.
 
-6. **Append to `development/log.md`**:
+6. **Verify the Hermes gateway is running.** The kanban dispatcher —
+   the thing that polls `kanban.db` and spawns worker processes — only
+   ticks while `hermes gateway start` is up. This is the design today:
+   `~/.hermes/config.yaml` sets `kanban.dispatch_in_gateway: true` with
+   a `dispatch_interval_seconds: 60` cadence, and `hermes kanban
+   daemon` is deprecated in favor of the gateway.
+
+   Read `~/.hermes/processes.json`. If it contains no entry with
+   `kind: gateway` (or equivalent), **refuse to mark init complete**.
+   Tell the user to start the gateway themselves — scientia does not
+   spawn long-running processes. For example:
+
+   ```bash
+   nohup hermes gateway start > ~/.hermes/logs/gateway.log 2>&1 &
+   # or wrap in a launchd plist for persistence across reboots
+   ```
+
+   Re-run `scientia-kanban-init` once the gateway is up.
+
+7. **Append to `development/log.md`**:
 
    ```markdown
    - YYYY-MM-DDTHH:MM:SSZ — scientia-kanban-init — host-ready — — profiles=4 kanban_db=<path>
    ```
 
-7. **Report ready.** The host is now ready to run
+8. **Report ready.** The host is now ready to run
    `scientia-kanban-emit` for any tenant.
 
 ## What this skill never does
@@ -65,3 +84,5 @@ Make this host ready to run the scientia kanban phase.
 - Creates kanban tasks. Emission is `scientia-kanban-emit`.
 - Modifies `kanban.db` schema. The schema is owned by Hermes.
 - Touches per-repo `development/`, `openspec/`, or `wiki/`.
+- Spawns the Hermes gateway. The user starts it themselves; this skill
+  only refuses to mark the host ready until the gateway is running.
