@@ -119,38 +119,92 @@ def gate_openspec_verify(report: Report, repo: Path) -> None:
         return
     if shutil.which("openspec") is None:
         report.add("openspec-verify", "warning",
-                   "openspec CLI not on PATH; cannot run OpenSpec verify")
+                   "openspec CLI not on PATH; cannot run OpenSpec validate")
         return
+    tenants = _known_tenants(repo)
     for ch in sorted(changes_dir.iterdir()):
         if not ch.is_dir():
             continue
-        change_id = ch.name
-        tenant = change_id.split("-", 1)[0] if "-" in change_id else None
+        change_dir_name = ch.name
+        tenant = _recover_tenant(change_dir_name, tenants)
         try:
             r = subprocess.run(
-                ["openspec", "verify", change_id],
+                ["openspec", "validate", change_dir_name, "--json", "--no-interactive"],
                 cwd=repo, capture_output=True, text=True, check=False, timeout=120,
             )
-            stdout = r.stdout + r.stderr
         except Exception as exc:
             report.add("openspec-verify", "warning",
-                       f"openspec verify {change_id} crashed: {exc}",
-                       tenant=tenant, change_id=change_id)
+                       f"openspec validate {change_dir_name} crashed: {exc}",
+                       tenant=tenant, change_id=change_dir_name)
             continue
-        low = stdout.lower()
-        if "critical" in low:
-            report.add("openspec-verify", "critical",
-                       summarize_openspec_output(stdout),
-                       tenant=tenant, change_id=change_id)
-        elif "warning" in low:
-            report.add("openspec-verify", "warning",
-                       summarize_openspec_output(stdout),
-                       tenant=tenant, change_id=change_id)
+        severity, message = _classify_openspec_validate(r.stdout, r.stderr, r.returncode)
+        if severity is not None:
+            report.add("openspec-verify", severity, message,
+                       tenant=tenant, change_id=change_dir_name)
 
 
-def summarize_openspec_output(text: str) -> str:
-    lines = [l.strip() for l in text.splitlines() if l.strip()]
-    return lines[-1] if lines else "(no output)"
+def _classify_openspec_validate(stdout: str, stderr: str, returncode: int):
+    """Map an `openspec validate --json` invocation to (severity, message).
+
+    Returns (None, "") on a clean pass. Severity mapping per issue level:
+        ERROR   → critical
+        WARNING → warning
+        other   → suggestion
+    """
+    data = _parse_openspec_json(stdout)
+    if data is None:
+        if returncode == 0:
+            return (None, "")
+        err = (stderr or stdout).strip().splitlines()
+        tail = err[-1] if err else "(no output)"
+        return ("warning",
+                f"openspec validate produced no parseable JSON (exit {returncode}): {tail[:200]}")
+    findings = []
+    worst = None
+    for item in data.get("items") or []:
+        for issue in item.get("issues") or []:
+            level = (issue.get("level") or "").upper()
+            sev = {"ERROR": "critical", "WARNING": "warning"}.get(level, "suggestion")
+            if worst is None or SEVERITIES.index(sev) > SEVERITIES.index(worst):
+                worst = sev
+            findings.append(f"[{level}] {issue.get('path', '')}: {issue.get('message', '')}")
+    if worst is None:
+        return (None, "")
+    head = "; ".join(findings[:3])
+    suffix = f" (+{len(findings) - 3} more)" if len(findings) > 3 else ""
+    return (worst, head + suffix)
+
+
+def _parse_openspec_json(stdout: str):
+    """openspec validate may emit a telemetry-notice line before the JSON
+    payload. Strip anything before the first '{' and try to parse.
+    """
+    idx = stdout.find("{")
+    if idx == -1:
+        return None
+    try:
+        return json.loads(stdout[idx:])
+    except json.JSONDecodeError:
+        return None
+
+
+def _known_tenants(repo: Path):
+    manifests = repo / "development" / "manifests"
+    if not manifests.is_dir():
+        return []
+    return sorted(d.name for d in manifests.iterdir() if d.is_dir())
+
+
+def _recover_tenant(change_dir_name: str, tenants):
+    """Recover the tenant slug from a change directory name like
+    `circuit-solver-2026-05-21-v1-spec`. Multi-hyphen tenants (e.g.
+    `circuit-solver`) require consulting the manifests directory; a naive
+    `split('-', 1)[0]` would return `'circuit'`.
+    """
+    for t in tenants:
+        if change_dir_name.startswith(t + "-"):
+            return t
+    return change_dir_name.split("-", 1)[0] if "-" in change_dir_name else None
 
 
 def gate_spec_on_trunk(report: Report, repo: Path) -> None:

@@ -150,7 +150,7 @@ def scan_tenants(repo_root: Path) -> dict:
             "stage": stage,
             "wiki_snapshot_resolves": wiki_snapshot_resolves(repo_root, active),
             "verify_status": detect_verify_status(repo_root, tenant, change_id),
-            "kanban_status": detect_kanban_status(tenant, change_id),
+            "kanban_status": detect_kanban_status(repo_root, tenant, change_id),
         }
     return out
 
@@ -186,7 +186,7 @@ def detect_stage(repo_root: Path, tenant: str, change_id: str) -> str:
         return "tasks"
     if verify_report_exists(change_dir) and not kanban_emitted(repo_root, tenant, change_id):
         return "verified"
-    kstat = detect_kanban_status(tenant, change_id)
+    kstat = detect_kanban_status(repo_root, tenant, change_id)
     if kstat == "running":
         return "running"
     if kstat == "done":
@@ -245,20 +245,76 @@ def detect_verify_status(repo_root: Path, tenant: str, change_id: str) -> str:
     reports = sorted(change_dir.glob("verify-*.md")) if change_dir.exists() else []
     if not reports:
         return "pending"
-    body = reports[-1].read_text(encoding="utf-8", errors="ignore").lower()
-    if "critical" in body:
+    body = reports[-1].read_text(encoding="utf-8", errors="ignore")
+    parsed = _parse_verify_frontmatter(body)
+    worst = parsed.get("worst_severity")
+    if worst == "critical":
         return "critical"
-    if "warning" in body:
+    if worst == "warning":
+        return "warning"
+    if worst in ("suggestion", "clean"):
+        return "clean"
+    # No worst_severity → try counts.*
+    if "critical" in parsed or "warning" in parsed:
+        if parsed.get("critical", 0) > 0:
+            return "critical"
+        if parsed.get("warning", 0) > 0:
+            return "warning"
+        return "clean"
+    # Last resort for reports lacking structured frontmatter. Less reliable
+    # (prose may legitimately mention "critical" or "warning"), but better
+    # than nothing for handwritten reports.
+    lower = body.lower()
+    if "critical" in lower:
+        return "critical"
+    if "warning" in lower:
         return "warning"
     return "clean"
 
 
-def detect_kanban_status(tenant: str, change_id: str) -> str:
+def _parse_verify_frontmatter(body: str) -> dict:
+    """Extract `worst_severity` and `counts.*` values from a verify
+    report's YAML frontmatter. Returns {} if no frontmatter is present.
+    """
+    lines = body.splitlines()
+    if not lines or lines[0].strip() != "---":
+        return {}
+    out: dict = {}
+    in_counts = False
+    for line in lines[1:]:
+        if line.strip() == "---":
+            break
+        m = re.match(r"\s*worst_severity:\s*([A-Za-z]+)\s*$", line)
+        if m:
+            out["worst_severity"] = m.group(1).lower()
+            in_counts = False
+            continue
+        if re.match(r"\s*counts:\s*$", line):
+            in_counts = True
+            continue
+        if in_counts:
+            m = re.match(r"\s+(critical|warning|suggestion):\s*(\d+)\s*$", line)
+            if m:
+                out[m.group(1).lower()] = int(m.group(2))
+                continue
+            if line and not line.startswith((" ", "\t")):
+                in_counts = False
+    return out
+
+
+def detect_kanban_status(repo_root: Path, tenant: str, change_id: str) -> str:
     if shutil.which("hermes") is None:
         return "none"
+    # The per-task index at development/tasks/<tenant>/<change_id>/*.md
+    # records the idempotency_key of every task emitted for this change.
+    # That's the authoritative key set — use it to filter the kanban list
+    # by exact `idempotency_key` match (substring matching on title/body
+    # is too loose; e.g. `2026-05-21-add-refunds` would also match
+    # `2026-05-21-add-refunds-v2`).
+    keys = _read_change_idempotency_keys(repo_root, tenant, change_id)
     try:
         result = subprocess.run(
-            ["hermes", "kanban", "list", "--tenant", tenant, "--format", "json"],
+            ["hermes", "kanban", "list", "--tenant", tenant, "--json"],
             capture_output=True, text=True, check=False, timeout=10,
         )
         if result.returncode != 0:
@@ -266,7 +322,15 @@ def detect_kanban_status(tenant: str, change_id: str) -> str:
         rows = json.loads(result.stdout or "[]")
     except Exception:
         return "none"
-    rows = [r for r in rows if change_id in (r.get("title", "") + r.get("body", ""))]
+    if keys:
+        rows = [
+            r for r in rows
+            if (r.get("idempotency_key") or r.get("key")) in keys
+        ]
+    else:
+        # No index yet — fall back to substring on title+body. Less precise
+        # but only relevant in legacy or partially-emitted states.
+        rows = [r for r in rows if change_id in (r.get("title", "") + r.get("body", ""))]
     if not rows:
         return "none"
     statuses = {r.get("status") for r in rows}
@@ -277,6 +341,31 @@ def detect_kanban_status(tenant: str, change_id: str) -> str:
     if statuses <= {"done", "archived"}:
         return "done"
     return "mixed"
+
+
+def _read_change_idempotency_keys(repo_root: Path, tenant: str, change_id: str) -> set:
+    """Collect idempotency keys recorded in this change's per-task index.
+
+    `scientia-kanban-emit` writes `development/tasks/<tenant>/<change_id>/<task>.md`
+    files containing an `idempotency_key: <key>` line. Returns the set of
+    keys; empty set if the index doesn't exist yet.
+    """
+    tasks_dir = repo_root / "development" / "tasks" / tenant / change_id
+    if not tasks_dir.is_dir():
+        return set()
+    keys = set()
+    for md in tasks_dir.glob("*.md"):
+        try:
+            for line in md.read_text(encoding="utf-8", errors="ignore").splitlines():
+                s = line.strip()
+                if s.startswith("idempotency_key:"):
+                    k = s.split(":", 1)[1].strip().strip('"').strip("'")
+                    if k:
+                        keys.add(k)
+                    break
+        except Exception:
+            continue
+    return keys
 
 
 _LINT_COUNT_RE = re.compile(r"\b(critical|warning)=(\d+)", re.IGNORECASE)
