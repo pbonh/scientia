@@ -1,6 +1,6 @@
 ---
 name: scientia-kanban-init
-description: One-shot Hermes Kanban bootstrap for the host. Creates the four scientia agent profile directories via `hermes profile create`, writes their SOUL.md bodies from this skill's assets/profiles/, symlinks the scientia skills (kanban-worker, grill, …) into ~/.hermes/skills/ so emit's `--skill scientia-…` resolves, verifies the hermes CLI is on PATH and the kanban.db path declared in development/config.yaml is writable, applies the per-repo `hermes.max_concurrent_children` cap to the host's `delegation.max_concurrent_children`, and confirms the Hermes gateway is up. Run once per host (not per repo) on first scientia use, or whenever the user says "initialize Hermes". Idempotent — never overwrites a hand-edited SOUL.md or pre-existing skill symlink.
+description: One-shot Hermes Kanban bootstrap for the host. Creates the four scientia agent profile directories via `hermes profile create`, writes their SOUL.md bodies from this skill's assets/profiles/, applies per-profile model configuration declared under `hermes.profiles` in development/config.yaml, symlinks the scientia skills (kanban-worker, grill, …) into ~/.hermes/skills/ so emit's `--skill scientia-…` resolves, verifies the hermes CLI is on PATH and the kanban.db path declared in development/config.yaml is writable, applies the per-repo `hermes.max_concurrent_children` cap to the host's `delegation.max_concurrent_children`, and confirms the Hermes gateway is up. Run once per host (not per repo) on first scientia use, or whenever the user says "initialize Hermes". Idempotent — never overwrites a hand-edited SOUL.md or pre-existing skill symlink; per-profile model config is authoritative and re-applied to converge.
 license: MIT
 metadata:
   bundle: scientia
@@ -56,6 +56,52 @@ Make this host ready to run the scientia kanban phase.
    after upgrading scientia), the user must explicitly remove the
    existing `SOUL.md` first: `rm ~/.hermes/profiles/$name/SOUL.md`
    and re-run this skill.
+
+3b. **Apply per-profile model config (optional).** Read
+   `development/config.yaml` for `hermes.profiles`. The block is keyed
+   by scientia *role* (`implementer`, `reviewer`, `integrator`,
+   `aggregator`) and mirrors Hermes' per-profile config schema 1:1 (see
+   `references/profile-models.md` for the full key reference, or
+   https://hermes-agent.nousresearch.com/docs/user-guide/configuring-models).
+
+   If the block is absent, scientia touches no model config — every
+   profile inherits Hermes' host-level defaults. Log
+   `model-config-skipped — reason=hermes.profiles-absent` to
+   `development/log.md` and skip to step 4.
+
+   If present, for each declared role:
+
+   ```bash
+   python3 "$BUNDLE_ROOT/skills/scientia-kanban-init/scripts/apply_profile_models.py" \
+     --repo-root "$REPO_ROOT"
+   ```
+
+   The script flattens each declared block to dotted-key leaves
+   (e.g. `model.default`, `auxiliary.vision.provider`,
+   `model_aliases.fav.model`), reads the profile's current effective
+   values via `hermes -p <resolved-name> config show --json`, and runs
+   `hermes -p <resolved-name> config set <key> <value>` only for leaves
+   that don't already match. **scientia config is authoritative** — any
+   hand-edit to `~/.hermes/profiles/<name>/config.yaml` that disagrees
+   with `hermes.profiles` is overwritten when the script runs.
+
+   **Idempotency.** Re-running is safe: keys already at their declared
+   values are no-ops. Per-role lines are appended to
+   `development/log.md`:
+
+   ```
+   - <ISO-Z> — scientia-kanban-init — model-config-applied — — profile=<role>(<resolved-name>) applied=<N> unchanged=<M>
+   ```
+
+   **On failure.** If `hermes config set` returns non-zero for any leaf
+   (invalid model string, provider not configured, etc.), the script
+   aborts with the failing key + Hermes' stderr surfaced verbatim. Fix
+   the value in `development/config.yaml` and re-run; partial
+   application is acceptable because the next run reconciles.
+
+   `scientia-kanban-emit` runs the same comparison as a preflight gate
+   and refuses to emit on drift — so any divergence after this step is
+   surfaced before workers spawn.
 
 4. **Install the scientia skills into `~/.hermes/skills/`.** Hermes
    discovers skills by their presence under `~/.hermes/skills/<name>/`
@@ -170,6 +216,14 @@ Make this host ready to run the scientia kanban phase.
 
 - Creates kanban tasks. Emission is `scientia-kanban-emit`.
 - Modifies `kanban.db` schema. The schema is owned by Hermes.
-- Touches per-repo `development/`, `openspec/`, or `wiki/`.
+- Touches per-repo `development/`, `openspec/`, or `wiki/` (other than
+  appending to `development/log.md`).
 - Spawns the Hermes gateway. The user starts it themselves; this skill
   only refuses to mark the host ready until the gateway is running.
+- Validates model strings against providers. `hermes config set`
+  validates as much as Hermes itself does; everything beyond that
+  (e.g., whether the chosen model exists on the chosen provider with
+  the configured credentials) is the provider's call at first use.
+- Manages provider credentials. `.env` files under
+  `~/.hermes/profiles/<name>/` are the user's domain; scientia stays
+  out of secret material.

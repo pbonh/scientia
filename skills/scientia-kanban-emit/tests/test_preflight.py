@@ -364,5 +364,148 @@ class PreflightAggregatorTests(unittest.TestCase):
         self.assertIn("desired=3", reasons[0])
 
 
+class PreflightProfileModelsDriftTests(unittest.TestCase):
+    """`profiles_block` threaded into preflight() must drive the
+    profile-models drift gate (separately from the existing
+    max_concurrent_children gate)."""
+
+    def _passing_change(self, td: Path):
+        change = td
+        (change / "adr").mkdir()
+        (change / "specs").mkdir()
+        _write_verify_report(change, "2026-05-20T1825", "clean",
+                             {"critical": 0, "warning": 0, "suggestion": 0})
+        processes = change / "processes.json"
+        processes.write_text(json.dumps([{"kind": "gateway", "pid": 1}]))
+        hermes_cfg = _write_hermes_config(change, 3)
+        return change, processes, hermes_cfg
+
+    def test_no_profiles_block_is_noop(self):
+        with TemporaryDirectory() as td:
+            change, processes, hermes_cfg = self._passing_change(Path(td))
+            with patch("shutil.which", return_value="/usr/local/bin/hermes"), \
+                 patch("subprocess.run", return_value=subprocess.CompletedProcess(
+                     args=[], returncode=0, stdout="", stderr="")):
+                reasons = emit.preflight(
+                    change_dir=change,
+                    processes_json_path=processes,
+                    block_on_severity="critical",
+                    trunk="main",
+                    desired_concurrency=3,
+                    hermes_config_path=hermes_cfg,
+                    profiles_block=None,
+                    profile_names=None,
+                )
+            self.assertEqual(reasons, [])
+
+    def test_drift_in_profile_models_surfaces_in_preflight(self):
+        with TemporaryDirectory() as td:
+            change, processes, hermes_cfg = self._passing_change(Path(td))
+            profiles_block = {
+                "implementer": {"model": {"default": "claude-opus-4.7"}},
+            }
+
+            def fake_run(argv, **kw):
+                # git log calls succeed; hermes config show returns a drifted value
+                if argv[:2] == ["hermes", "-p"]:
+                    return subprocess.CompletedProcess(
+                        args=argv, returncode=0,
+                        stdout=json.dumps({"model": {"default": "claude-sonnet-4.6"}}),
+                        stderr="",
+                    )
+                return subprocess.CompletedProcess(
+                    args=argv, returncode=0, stdout="", stderr="",
+                )
+
+            with patch("shutil.which", return_value="/usr/local/bin/hermes"), \
+                 patch("subprocess.run", side_effect=fake_run):
+                reasons = emit.preflight(
+                    change_dir=change,
+                    processes_json_path=processes,
+                    block_on_severity="critical",
+                    trunk="main",
+                    desired_concurrency=3,
+                    hermes_config_path=hermes_cfg,
+                    profiles_block=profiles_block,
+                    profile_names=None,
+                    profile_runner=fake_run,
+                )
+        # Expect exactly one refusal — the profile-models drift one.
+        self.assertEqual(len(reasons), 1)
+        self.assertIn("profile model config drift", reasons[0])
+        self.assertIn("model.default", reasons[0])
+
+    def test_matching_profile_models_passes_preflight(self):
+        with TemporaryDirectory() as td:
+            change, processes, hermes_cfg = self._passing_change(Path(td))
+            profiles_block = {
+                "implementer": {"model": {"default": "claude-opus-4.7"}},
+            }
+
+            def fake_run(argv, **kw):
+                if argv[:2] == ["hermes", "-p"]:
+                    return subprocess.CompletedProcess(
+                        args=argv, returncode=0,
+                        stdout=json.dumps({"model": {"default": "claude-opus-4.7"}}),
+                        stderr="",
+                    )
+                return subprocess.CompletedProcess(
+                    args=argv, returncode=0, stdout="", stderr="",
+                )
+
+            with patch("shutil.which", return_value="/usr/local/bin/hermes"), \
+                 patch("subprocess.run", side_effect=fake_run):
+                reasons = emit.preflight(
+                    change_dir=change,
+                    processes_json_path=processes,
+                    block_on_severity="critical",
+                    trunk="main",
+                    desired_concurrency=3,
+                    hermes_config_path=hermes_cfg,
+                    profiles_block=profiles_block,
+                    profile_names=None,
+                    profile_runner=fake_run,
+                )
+        self.assertEqual(reasons, [])
+
+
+class YamlSubsetSingleQuoteTests(unittest.TestCase):
+    """The YAML parser must treat single-quoted strings the same as
+    double-quoted (notably for `model: ''` → empty string, not the
+    literal `"''"`)."""
+
+    def test_single_quoted_empty_string(self):
+        result = emit._parse_yaml_subset("k: ''\n")
+        self.assertEqual(result, {"k": ""})
+
+    def test_single_quoted_non_empty(self):
+        result = emit._parse_yaml_subset("k: 'value'\n")
+        self.assertEqual(result, {"k": "value"})
+
+    def test_double_quoted_still_works(self):
+        result = emit._parse_yaml_subset('k: "value"\n')
+        self.assertEqual(result, {"k": "value"})
+
+    def test_nested_hermes_profiles_block_parses(self):
+        text = (
+            "hermes:\n"
+            "  profiles:\n"
+            "    implementer:\n"
+            "      model:\n"
+            "        provider: anthropic\n"
+            "        default: claude-opus-4.7\n"
+            "        base_url: ''\n"
+        )
+        result = emit._parse_yaml_subset(text)
+        self.assertEqual(
+            result["hermes"]["profiles"]["implementer"]["model"],
+            {
+                "provider": "anthropic",
+                "default": "claude-opus-4.7",
+                "base_url": "",
+            },
+        )
+
+
 if __name__ == "__main__":
     unittest.main()

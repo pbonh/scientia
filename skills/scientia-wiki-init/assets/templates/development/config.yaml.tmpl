@@ -27,6 +27,33 @@ hermes:
     reviewer:    scientia-reviewer
     integrator:  scientia-integrator
     aggregator:  scientia-aggregator
+  # Per-profile model configuration. Optional; absent block = hands-off,
+  # every profile inherits Hermes' host-level defaults. Keys mirror
+  # Hermes' per-profile config.yaml schema 1:1 — copy/paste examples
+  # from https://hermes-agent.nousresearch.com/docs/user-guide/configuring-models
+  # work as-is. scientia-kanban-init applies any declared leaf via
+  # `hermes -p <name> config set`; scientia-kanban-emit refuses on
+  # drift between this block and the effective profile config.
+  # Schema reference:
+  #   skills/scientia-kanban-init/references/profile-models.md
+  #
+  # profiles:
+  #   implementer:
+  #     model:
+  #       provider: anthropic
+  #       default: claude-opus-4.7
+  #     auxiliary:
+  #       vision:
+  #         provider: openrouter
+  #         model: google/gemini-2.5-flash
+  #     model_aliases:
+  #       fav:
+  #         model: claude-sonnet-4.6
+  #         provider: anthropic
+  #   reviewer:
+  #     model:
+  #       default: claude-sonnet-4.6
+  #   # integrator and aggregator omitted -> Hermes defaults
 
 # Emit policy.
 emit:

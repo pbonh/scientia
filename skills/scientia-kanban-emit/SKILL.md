@@ -40,6 +40,16 @@ Refuse to emit if any of:
   in `scientia-kanban-init` step 6.
 - An ADR cited by the spec is `deprecated` or `superseded` without a
   successor — emission would be against a stale decision.
+- **Profile model config drift.** If `development/config.yaml` declares
+  `hermes.profiles.<role>`, the effective value of each declared leaf
+  (read via `hermes -p <resolved-name> config show --json`) must match
+  the declared value. On mismatch, refuse and surface every drifted
+  `(profile, key, scientia-value, hermes-value)`; the user re-runs
+  `scientia-kanban-init` (which is authoritative) to converge. When
+  `hermes.profiles` is absent, the check is a no-op — every profile
+  inherits Hermes' host-level defaults and there is nothing to drift
+  against. See `scientia-kanban-init/references/profile-models.md` for
+  the schema.
 
 ## Procedure
 

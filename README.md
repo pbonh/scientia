@@ -97,6 +97,35 @@ tenants run in parallel. Change-ids are `<tenant>/<date>-<slug>/` across
 - `openspec/config.yaml` — OpenSpec's own config (stage→skill bindings);
   scientia writes the bindings at init time but does not own this file.
 
+### Per-profile Hermes models
+
+`hermes.profiles` in `development/config.yaml` controls the model each
+Hermes profile uses, with full fidelity to Hermes' own
+[configuring-models](https://hermes-agent.nousresearch.com/docs/user-guide/configuring-models)
+schema — main `model`, every `auxiliary` task, and `model_aliases` are
+all configurable per profile (`implementer`, `reviewer`, `integrator`,
+`aggregator`). `scientia-kanban-init` applies declared values via
+`hermes -p <name> config set`; `scientia-kanban-emit` refuses on drift.
+The block is optional — absent means hands-off, so existing repos see
+no change. Schema reference:
+[`skills/scientia-kanban-init/references/profile-models.md`](skills/scientia-kanban-init/references/profile-models.md).
+
+```yaml
+hermes:
+  profiles:
+    implementer:
+      model:
+        provider: anthropic
+        default: claude-opus-4.7
+    reviewer:
+      model:
+        default: claude-sonnet-4.6
+    aggregator:
+      model:
+        default: claude-haiku-4.5
+    # integrator omitted -> inherits Hermes host defaults
+```
+
 ## Versioning
 
 Each repo records `scientia_schema_version` in `development/config.yaml`;

@@ -34,6 +34,7 @@ from idempotency_key import (  # noqa: E402
     slugify,
     strip_for_hash,
 )
+from profile_models import check_profile_models_drift  # noqa: E402
 
 
 # ---------------------------------------------------------------------------
@@ -834,7 +835,10 @@ def orchestrate(
     change_dir = repo_root / "openspec" / "changes" / f"{tenant}-{change_slug}"
 
     block_on = config.get("verify", {}).get("block_on_severity", "critical")
-    desired_concurrency = config.get("hermes", {}).get("max_concurrent_children", 3)
+    hermes_cfg = config.get("hermes", {}) or {}
+    desired_concurrency = hermes_cfg.get("max_concurrent_children", 3)
+    profiles_block = hermes_cfg.get("profiles")
+    profile_names = hermes_cfg.get("profile_names")
     if hermes_config_path is None:
         hermes_config_path = Path.home() / ".hermes" / "config.yaml"
     if dry_run:
@@ -857,6 +861,8 @@ def orchestrate(
             trunk=trunk,
             desired_concurrency=desired_concurrency,
             hermes_config_path=hermes_config_path,
+            profiles_block=profiles_block,
+            profile_names=profile_names,
         )
     if reasons:
         raise PreflightRefused(reasons)
@@ -1170,10 +1176,17 @@ def preflight(
     trunk: str,
     desired_concurrency: int,
     hermes_config_path: Path,
+    profiles_block: Optional[dict] = None,
+    profile_names: Optional[dict] = None,
+    profile_runner=subprocess.run,
 ) -> List[str]:
     """Run every preflight gate and collect refusal reasons.
 
     Returns an empty list when all gates pass.
+
+    `profiles_block` and `profile_names` come from development/config.yaml's
+    `hermes.profiles` and `hermes.profile_names`. When `profiles_block` is
+    falsy, the model-config drift check is a no-op (hands-off default).
     """
     reasons: List[str] = []
     for reason in (
@@ -1182,6 +1195,11 @@ def preflight(
         check_concurrency_cap(
             desired=desired_concurrency,
             hermes_config_path=hermes_config_path,
+        ),
+        check_profile_models_drift(
+            profiles_block=profiles_block,
+            profile_names=profile_names,
+            runner=profile_runner,
         ),
         check_verify_severity(change_dir, block_on=block_on_severity),
         check_adr_status(change_dir),
@@ -1215,7 +1233,9 @@ def _parse_yaml_subset(text: str) -> dict:
 
     def _scalar(v: str):
         v = v.strip()
-        if v.startswith('"') and v.endswith('"'):
+        if len(v) >= 2 and (
+            (v[0] == '"' and v[-1] == '"') or (v[0] == "'" and v[-1] == "'")
+        ):
             return v[1:-1]
         if v in ("null", "~", ""):
             return None
