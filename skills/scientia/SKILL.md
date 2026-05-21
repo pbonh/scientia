@@ -40,22 +40,34 @@ diagram and stage descriptions.
 ## How to activate this skill
 
 1. **Detect pipeline state.** Run `scripts/state_detect.py` *from the
-   project root* — the directory the user's session was launched in.
-   **Never `cd` into the skill bundle to reach the script.** Either
-   invoke it by absolute path while staying in the project, or pass
-   `--repo <project-path>` explicitly:
+   project root*. **The project root is the directory the user's session
+   was launched in — your current working directory, i.e. the output of
+   `pwd`.** It is *never* derivable from the skill bundle's path, from a
+   parent home directory, or from any other context. Distrobox homes and
+   monorepo roots may contain stray `wiki/` directories of their own;
+   those are not your scientia project.
+
+   The preferred invocation keeps cwd in the project and references the
+   script by absolute path — the script then auto-uses cwd as the repo:
 
    ```bash
-   # preferred — cwd stays in the project, script is referenced by abs path
    python3 /path/to/skills/scientia/scripts/state_detect.py --pretty
-
-   # equivalent — explicit --repo lets you call from anywhere
-   python3 /path/to/skills/scientia/scripts/state_detect.py --repo "$PROJECT" --pretty
    ```
 
-   If you `cd` into the bundle first, the script will refuse to run and
-   exit nonzero, because the bundle is not a scientia project and a
-   silent `wiki_present: false` masks a fully initialized wiki.
+   Only pass `--repo` if you genuinely need to invoke from elsewhere, and
+   in that case pass the session's cwd verbatim — do not synthesize a
+   path from the skill's location:
+
+   ```bash
+   python3 /path/to/skills/scientia/scripts/state_detect.py --repo "$(pwd)" --pretty
+   ```
+
+   The script will:
+   - exit 2 if invoked from inside the skill bundle (the bundle is not
+     a project),
+   - warn on stderr if `--repo` points to a directory with no `.git/`,
+     `development/`, or `openspec/` — a strong sign you've named a
+     parent/home directory by mistake.
 
    The script checks (or read these four canonical locations yourself
    in this order):

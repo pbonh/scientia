@@ -328,6 +328,18 @@ def main() -> int:
 
     if args.repo is not None:
         root = Path(args.repo).resolve()
+        if not (root / ".git").exists() \
+                and not (root / "development").is_dir() \
+                and not (root / "openspec").is_dir():
+            print(
+                f"warning: --repo {root} has no `.git/`, `development/`, "
+                f"or `openspec/`. A bare `wiki/` is not enough — the path "
+                f"may be a home/parent directory rather than the project "
+                f"root. The scientia project root is the directory the "
+                f"session was launched in (`pwd`), not anything inferred "
+                f"from the skill bundle's location.",
+                file=sys.stderr,
+            )
     else:
         cwd = Path.cwd().resolve()
         if is_inside_bundle(cwd):
