@@ -27,33 +27,59 @@ hermes:
     reviewer:    scientia-reviewer
     integrator:  scientia-integrator
     aggregator:  scientia-aggregator
-  # Per-profile model configuration. Optional; absent block = hands-off,
-  # every profile inherits Hermes' host-level defaults. Keys mirror
-  # Hermes' per-profile config.yaml schema 1:1 — copy/paste examples
-  # from https://hermes-agent.nousresearch.com/docs/user-guide/configuring-models
-  # work as-is. scientia-kanban-init applies any declared leaf via
-  # `hermes -p <name> config set`; scientia-kanban-emit refuses on
-  # drift between this block and the effective profile config.
-  # Schema reference:
+  # Per-profile model configuration. scientia-kanban-init applies any
+  # declared leaf via `hermes -p <name> config set`; scientia-kanban-emit
+  # refuses on drift between this block and the effective profile config.
+  # Keys mirror Hermes' per-profile config.yaml schema 1:1 — copy/paste
+  # examples from
+  # https://hermes-agent.nousresearch.com/docs/user-guide/configuring-models
+  # work as-is. Schema reference:
   #   skills/scientia-kanban-init/references/profile-models.md
   #
-  # profiles:
-  #   implementer:
-  #     model:
-  #       provider: anthropic
-  #       default: claude-opus-4.7
-  #     auxiliary:
-  #       vision:
-  #         provider: openrouter
-  #         model: google/gemini-2.5-flash
-  #     model_aliases:
-  #       fav:
-  #         model: claude-sonnet-4.6
-  #         provider: anthropic
-  #   reviewer:
-  #     model:
-  #       default: claude-sonnet-4.6
-  #   # integrator and aggregator omitted -> Hermes defaults
+  # Defaults below route every profile through the Fireworks OpenAI-
+  # compatible endpoint, with a model chosen for the role's workload.
+  # Hermes has no built-in `fireworks` provider, so the pattern is
+  # `base_url` + an OpenAI-compatible `api_mode` — Hermes calls the
+  # endpoint directly and ignores `provider`. You must provide
+  # `FIREWORKS_API_KEY` (or `OPENAI_API_KEY`) in
+  # `~/.hermes/profiles/<name>/.env` — scientia does not manage secrets.
+  # To opt out and inherit Hermes' host-level defaults, comment out the
+  # `profiles:` block entirely.
+  profiles:
+    # Smartest model — writes code and tests against the Gherkin scenario.
+    implementer:
+      model:
+        provider: custom
+        default: accounts/fireworks/models/glm-5p1
+        base_url: https://api.fireworks.ai/inference/v1
+        api_mode: chat_completions
+
+    # Largest context — reads the full diff, the implementer's branch,
+    # plus every ADR cited by the scenario in one pass.
+    reviewer:
+      model:
+        provider: custom
+        default: accounts/fireworks/models/deepseek-v4-pro
+        base_url: https://api.fireworks.ai/inference/v1
+        api_mode: chat_completions
+
+    # Good all-around — merge preflights, rebase, post comment. No
+    # heavy reasoning; favors throughput.
+    integrator:
+      model:
+        provider: custom
+        default: accounts/fireworks/models/kimi-k2p6
+        base_url: https://api.fireworks.ai/inference/v1
+        api_mode: chat_completions
+
+    # Good all-around — synthesizes finished child handoffs into the
+    # spec's Implementation Evidence section.
+    aggregator:
+      model:
+        provider: custom
+        default: accounts/fireworks/models/qwen3p6-plus
+        base_url: https://api.fireworks.ai/inference/v1
+        api_mode: chat_completions
 
 # Emit policy.
 emit:
