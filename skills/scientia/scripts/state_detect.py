@@ -8,7 +8,17 @@ skills/scientia/references/SKILL_MAP.md.
 Usage:
     state_detect.py [--repo <path>] [--pretty]
 
-Defaults: --repo $(pwd). Prints JSON to stdout.
+When `--repo` is omitted, the script self-locates the project root:
+
+- If `$(pwd)` is inside the scientia skill bundle, the script exits 2
+  with an error — the bundle is never a scientia project, and silently
+  treating it as one is the bug that motivated this guard.
+- Otherwise the script walks up from `$(pwd)` looking for a directory
+  with `.git/`, `wiki/index.md`, `development/`, or `openspec/`. The
+  first match wins; if none match, it falls back to `$(pwd)` (consistent
+  with a fresh project before `scientia-wiki-init`).
+
+Pass `--repo <path>` to bypass auto-detection entirely.
 
 This script is invoked by the orchestrator skill on activation. It is
 read-only.
@@ -18,7 +28,7 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
+import re
 import shutil
 import subprocess
 import sys
@@ -28,6 +38,39 @@ STAGE_ORDER = [
     "absent", "bound", "proposed", "specs", "design",
     "adr", "tasks", "verified", "emitted", "running", "done", "archived",
 ]
+
+
+def bundle_root() -> Path:
+    # scripts/state_detect.py → scripts/ → bundle root (skills/scientia/).
+    return Path(__file__).resolve().parent.parent
+
+
+def is_inside_bundle(path: Path) -> bool:
+    try:
+        path.resolve().relative_to(bundle_root())
+        return True
+    except ValueError:
+        return False
+
+
+def has_scientia_markers(path: Path) -> bool:
+    return (path / "wiki" / "index.md").exists() \
+        or (path / "development").is_dir() \
+        or (path / "openspec").is_dir()
+
+
+def find_project_root(start: Path) -> Path | None:
+    """Walk up from `start` to find a scientia project or git root.
+
+    Returns the first ancestor (including `start` itself) with either
+    scientia markers or a `.git` entry. Returns `None` if no match before
+    the filesystem root.
+    """
+    start = start.resolve()
+    for ancestor in [start, *start.parents]:
+        if has_scientia_markers(ancestor) or (ancestor / ".git").exists():
+            return ancestor
+    return None
 
 
 def detect_repo(root: Path) -> dict:
@@ -236,8 +279,14 @@ def detect_kanban_status(tenant: str, change_id: str) -> str:
     return "mixed"
 
 
+_LINT_COUNT_RE = re.compile(r"\b(critical|warning)=(\d+)", re.IGNORECASE)
+
+
 def scan_lint_status(repo_root: Path) -> str:
-    # Surface latest scientia-wiki-lint report if present.
+    # Surface latest scientia-wiki-lint report if present. Log entries look
+    # like `... — scientia-wiki-lint — completed — — critical=0 warning=11 ...`,
+    # so we parse the counts rather than substring-match (which would treat
+    # `critical=0` as critical).
     log = repo_root / "development" / "log.md"
     if not log.exists():
         return "clean"
@@ -245,24 +294,64 @@ def scan_lint_status(repo_root: Path) -> str:
         body = log.read_text(encoding="utf-8", errors="ignore").splitlines()
     except Exception:
         return "clean"
-    # Look at the most recent lint entry (last 50 lines suffice).
     for line in reversed(body[-200:]):
-        if "scientia-wiki-lint" in line:
-            if "critical" in line.lower():
+        if "scientia-wiki-lint" not in line:
+            continue
+        counts = {
+            k.lower(): int(v) for k, v in _LINT_COUNT_RE.findall(line)
+        }
+        if counts:
+            if counts.get("critical", 0) > 0:
                 return "critical"
-            if "warning" in line.lower():
+            if counts.get("warning", 0) > 0:
                 return "warning"
             return "clean"
+        # Fallback for older entries without explicit counts.
+        lower = line.lower()
+        if "critical" in lower:
+            return "critical"
+        if "warning" in lower:
+            return "warning"
+        return "clean"
     return "clean"
 
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--repo", default=os.getcwd())
+    ap.add_argument(
+        "--repo",
+        default=None,
+        help="Path to the scientia project (default: auto-detect from cwd).",
+    )
     ap.add_argument("--pretty", action="store_true")
     args = ap.parse_args()
 
-    root = Path(args.repo).resolve()
+    if args.repo is not None:
+        root = Path(args.repo).resolve()
+    else:
+        cwd = Path.cwd().resolve()
+        if is_inside_bundle(cwd):
+            print(
+                "error: state_detect.py was invoked from inside the scientia "
+                "skill bundle. The bundle is not a scientia project; running "
+                "the script here will always report `wiki_present: false` "
+                "even when your project has a fully initialized wiki.\n"
+                "  Fix: run the script from your project directory without "
+                "`cd`ing into the bundle, or pass --repo <project-path>.\n"
+                f"  cwd:    {cwd}\n"
+                f"  bundle: {bundle_root()}",
+                file=sys.stderr,
+            )
+            return 2
+        resolved = find_project_root(cwd)
+        root = resolved if resolved is not None else cwd
+        if resolved is not None and resolved != cwd:
+            print(
+                f"note: state_detect.py auto-detected project root {resolved} "
+                f"(invoked from {cwd}). Pass --repo to silence.",
+                file=sys.stderr,
+            )
+
     state = detect_repo(root)
     indent = 2 if args.pretty else None
     print(json.dumps(state, indent=indent, sort_keys=True))

@@ -39,8 +39,26 @@ diagram and stage descriptions.
 
 ## How to activate this skill
 
-1. **Detect pipeline state.** Run `scripts/state_detect.py` (or read the
-   four canonical locations yourself in this order):
+1. **Detect pipeline state.** Run `scripts/state_detect.py` *from the
+   project root* — the directory the user's session was launched in.
+   **Never `cd` into the skill bundle to reach the script.** Either
+   invoke it by absolute path while staying in the project, or pass
+   `--repo <project-path>` explicitly:
+
+   ```bash
+   # preferred — cwd stays in the project, script is referenced by abs path
+   python3 /path/to/skills/scientia/scripts/state_detect.py --pretty
+
+   # equivalent — explicit --repo lets you call from anywhere
+   python3 /path/to/skills/scientia/scripts/state_detect.py --repo "$PROJECT" --pretty
+   ```
+
+   If you `cd` into the bundle first, the script will refuse to run and
+   exit nonzero, because the bundle is not a scientia project and a
+   silent `wiki_present: false` masks a fully initialized wiki.
+
+   The script checks (or read these four canonical locations yourself
+   in this order):
    - `wiki/index.md` → does the wiki exist?
    - `development/manifests/*/` → which tenants have manifests, and at
      what stage?
