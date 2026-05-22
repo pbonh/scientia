@@ -469,6 +469,115 @@ class PreflightProfileModelsDriftTests(unittest.TestCase):
         self.assertEqual(reasons, [])
 
 
+class PreflightProfilesExistTests(unittest.TestCase):
+    """`check_profiles_exist` runs unconditionally — independent of
+    `hermes.profiles` model-config. Missing profiles must surface as a
+    preflight refusal so emit doesn't strand tasks as
+    `skipped_nonspawnable`."""
+
+    def _passing_change(self, td: Path):
+        change = td
+        (change / "adr").mkdir()
+        (change / "specs").mkdir()
+        _write_verify_report(change, "2026-05-20T1825", "clean",
+                             {"critical": 0, "warning": 0, "suggestion": 0})
+        processes = change / "processes.json"
+        processes.write_text(json.dumps([{"kind": "gateway", "pid": 1}]))
+        hermes_cfg = _write_hermes_config(change, 3)
+        return change, processes, hermes_cfg
+
+    def test_missing_profile_refuses_preflight(self):
+        with TemporaryDirectory() as td:
+            change, processes, hermes_cfg = self._passing_change(Path(td))
+
+            def fake_run(argv, **kw):
+                # scientia-integrator does not exist; the others do.
+                if argv[:3] == ["hermes", "profile", "show"]:
+                    name = argv[3]
+                    rc = 1 if name == "scientia-integrator" else 0
+                    return subprocess.CompletedProcess(
+                        args=argv, returncode=rc, stdout="", stderr="",
+                    )
+                return subprocess.CompletedProcess(
+                    args=argv, returncode=0, stdout="", stderr="",
+                )
+
+            with patch("shutil.which", return_value="/usr/local/bin/hermes"), \
+                 patch("subprocess.run", side_effect=fake_run):
+                reasons = emit.preflight(
+                    change_dir=change,
+                    processes_json_path=processes,
+                    block_on_severity="critical",
+                    trunk="main",
+                    desired_concurrency=3,
+                    hermes_config_path=hermes_cfg,
+                    profiles_block=None,
+                    profile_names=None,
+                    profile_runner=fake_run,
+                )
+        self.assertEqual(len(reasons), 1)
+        self.assertIn("scientia-integrator", reasons[0])
+        self.assertIn("scientia-kanban-init", reasons[0])
+
+    def test_all_profiles_present_passes_preflight(self):
+        with TemporaryDirectory() as td:
+            change, processes, hermes_cfg = self._passing_change(Path(td))
+
+            def fake_run(argv, **kw):
+                # All four scientia profiles exist.
+                return subprocess.CompletedProcess(
+                    args=argv, returncode=0, stdout="", stderr="",
+                )
+
+            with patch("shutil.which", return_value="/usr/local/bin/hermes"), \
+                 patch("subprocess.run", side_effect=fake_run):
+                reasons = emit.preflight(
+                    change_dir=change,
+                    processes_json_path=processes,
+                    block_on_severity="critical",
+                    trunk="main",
+                    desired_concurrency=3,
+                    hermes_config_path=hermes_cfg,
+                    profiles_block=None,
+                    profile_names=None,
+                    profile_runner=fake_run,
+                )
+        self.assertEqual(reasons, [])
+
+    def test_existence_independent_of_model_config_drift(self):
+        # Even with hermes.profiles absent, the existence gate still fires.
+        with TemporaryDirectory() as td:
+            change, processes, hermes_cfg = self._passing_change(Path(td))
+
+            def fake_run(argv, **kw):
+                if argv[:3] == ["hermes", "profile", "show"]:
+                    return subprocess.CompletedProcess(
+                        args=argv, returncode=1, stdout="",
+                        stderr="profile not found",
+                    )
+                return subprocess.CompletedProcess(
+                    args=argv, returncode=0, stdout="", stderr="",
+                )
+
+            with patch("shutil.which", return_value="/usr/local/bin/hermes"), \
+                 patch("subprocess.run", side_effect=fake_run):
+                reasons = emit.preflight(
+                    change_dir=change,
+                    processes_json_path=processes,
+                    block_on_severity="critical",
+                    trunk="main",
+                    desired_concurrency=3,
+                    hermes_config_path=hermes_cfg,
+                    profiles_block=None,  # absent → drift gate is no-op
+                    profile_names=None,
+                    profile_runner=fake_run,
+                )
+        # Exactly one refusal — the existence gate, listing all four roles.
+        self.assertEqual(len(reasons), 1)
+        for role in ("implementer", "reviewer", "integrator", "aggregator"):
+            self.assertIn(f"scientia-{role}", reasons[0])
+
+
 class YamlSubsetSingleQuoteTests(unittest.TestCase):
     """The YAML parser must treat single-quoted strings the same as
     double-quoted (notably for `model: ''` → empty string, not the

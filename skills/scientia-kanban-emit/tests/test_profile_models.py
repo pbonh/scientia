@@ -467,5 +467,96 @@ class CheckProfileModelsDriftTests(unittest.TestCase):
             )
 
 
+# ---------------------------------------------------------------------------
+# check_profiles_exist
+# ---------------------------------------------------------------------------
+
+
+def _existence_runner(existing: set):
+    """Build a runner that mimics `hermes profile show <name>` —
+    returncode=0 when name is in `existing`, else returncode=1.
+    """
+    def _run(argv, **kw):
+        # argv shape: ["hermes", "profile", "show", "<name>"]
+        if argv[:3] == ["hermes", "profile", "show"]:
+            name = argv[3]
+            rc = 0 if name in existing else 1
+            return SimpleNamespace(returncode=rc, stdout="", stderr="")
+        return SimpleNamespace(returncode=0, stdout="", stderr="")
+    return _run
+
+
+class CheckProfilesExistTests(unittest.TestCase):
+    def test_passes_when_all_default_profiles_exist(self):
+        runner = _existence_runner({
+            "scientia-implementer",
+            "scientia-reviewer",
+            "scientia-integrator",
+            "scientia-aggregator",
+        })
+        self.assertIsNone(
+            pm.check_profiles_exist(profile_names=None, runner=runner)
+        )
+
+    def test_refuses_when_one_profile_missing(self):
+        runner = _existence_runner({
+            "scientia-implementer",
+            "scientia-reviewer",
+            # scientia-integrator missing
+            "scientia-aggregator",
+        })
+        reason = pm.check_profiles_exist(profile_names=None, runner=runner)
+        self.assertIsNotNone(reason)
+        self.assertIn("scientia-integrator", reason)
+        self.assertIn("role=integrator", reason)
+        self.assertIn("scientia-kanban-init", reason)
+        # Other profiles should NOT appear in the refusal.
+        self.assertNotIn("scientia-implementer", reason)
+        self.assertNotIn("scientia-reviewer", reason)
+        self.assertNotIn("scientia-aggregator", reason)
+
+    def test_refuses_when_all_profiles_missing(self):
+        runner = _existence_runner(set())  # none exist
+        reason = pm.check_profiles_exist(profile_names=None, runner=runner)
+        self.assertIsNotNone(reason)
+        for role in ("implementer", "reviewer", "integrator", "aggregator"):
+            self.assertIn(f"scientia-{role}", reason)
+
+    def test_uses_profile_names_overrides(self):
+        # Override: integrator role lives under a custom profile name.
+        names = {"integrator": "my-custom-integrator"}
+        runner = _existence_runner({
+            "scientia-implementer",
+            "scientia-reviewer",
+            "my-custom-integrator",
+            "scientia-aggregator",
+        })
+        self.assertIsNone(
+            pm.check_profiles_exist(profile_names=names, runner=runner)
+        )
+
+    def test_override_missing_surfaces_resolved_name(self):
+        names = {"integrator": "my-custom-integrator"}
+        runner = _existence_runner({
+            "scientia-implementer",
+            "scientia-reviewer",
+            # my-custom-integrator missing
+            "scientia-aggregator",
+        })
+        reason = pm.check_profiles_exist(profile_names=names, runner=runner)
+        self.assertIsNotNone(reason)
+        self.assertIn("my-custom-integrator", reason)
+        self.assertIn("role=integrator", reason)
+
+    def test_hermes_not_on_path_returns_none(self):
+        # When `hermes` is missing entirely, FileNotFoundError is raised.
+        # This gate defers to check_hermes_on_path and returns None.
+        def raise_fnf(*a, **kw):
+            raise FileNotFoundError("hermes")
+        self.assertIsNone(
+            pm.check_profiles_exist(profile_names=None, runner=raise_fnf)
+        )
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -1,6 +1,6 @@
 ---
 name: scientia-kanban-init
-description: One-shot Hermes Kanban bootstrap for the host. Creates the four scientia agent profile directories via `hermes profile create`, writes their SOUL.md bodies from this skill's assets/profiles/, applies per-profile model configuration declared under `hermes.profiles` in development/config.yaml, symlinks the scientia skills (kanban-worker, grill, …) into ~/.hermes/skills/ so emit's `--skill scientia-…` resolves, verifies the hermes CLI is on PATH and the kanban.db path declared in development/config.yaml is writable, applies the per-repo `hermes.max_concurrent_children` cap to the host's `delegation.max_concurrent_children`, and confirms the Hermes gateway is up. Run once per host (not per repo) on first scientia use, or whenever the user says "initialize Hermes". Idempotent — never overwrites a hand-edited SOUL.md or pre-existing skill symlink; per-profile model config is authoritative and re-applied to converge.
+description: One-shot Hermes Kanban bootstrap for the host. Creates the four scientia agent profile directories via `hermes profile create`, writes their SOUL.md bodies from this skill's assets/profiles/, applies per-profile model configuration declared under `hermes.profiles` in development/config.yaml, symlinks the scientia skills (kanban-worker, grill, …) into both `~/.hermes/skills/` (for emit-time `--skill` validation) and each `~/.hermes/profiles/<name>/skills/` (for worker-time skill loading; required — workers crash on spawn without it), verifies the hermes CLI is on PATH and the kanban.db path declared in development/config.yaml is writable, applies the per-repo `hermes.max_concurrent_children` cap to the host's `delegation.max_concurrent_children`, and confirms the Hermes gateway is up. Run once per host (not per repo) on first scientia use, or whenever the user says "initialize Hermes". Idempotent — never overwrites a hand-edited SOUL.md or pre-existing skill symlink; per-profile model config is authoritative and re-applied to converge.
 license: MIT
 metadata:
   bundle: scientia
@@ -103,34 +103,91 @@ Make this host ready to run the scientia kanban phase.
    and refuses to emit on drift — so any divergence after this step is
    surfaced before workers spawn.
 
-4. **Install the scientia skills into `~/.hermes/skills/`.** Hermes
-   discovers skills by their presence under `~/.hermes/skills/<name>/`
-   (either a category subdir, or a top-level symlink to a
-   `SKILL.md`-bearing directory). Symlink each scientia skill the
-   profiles reference into that tree so `--skill scientia-…`
-   invocations from `scientia-kanban-emit` resolve.
+4. **Install the scientia skills — both host-globally and per-profile.**
+   Hermes resolves skill names in two independent places:
 
-   For each `<name>` in the scientia bundle's `skills/` directory
-   (in particular `scientia-kanban-worker` and `scientia-grill`,
-   which every profile loads):
+   - `~/.hermes/skills/<name>/` is the host-global tree. The
+     `hermes kanban create --skill <name>` call in
+     `scientia-kanban-emit` validates skill names against this tree
+     before accepting a task.
+   - `~/.hermes/profiles/<profile>/skills/<name>/` is the
+     profile-local tree. When the dispatcher spawns a worker against
+     a profile, that worker's skill loader reads from *its own*
+     profile-local `skills/` directory — not the global tree. A
+     scientia skill that exists only host-globally will pass the
+     dispatcher's spawnable check but the worker process will exit
+     immediately with
+     `Error: Unknown skill(s): scientia-kanban-worker, scientia-grill`,
+     and the task transitions to `blocked`. Recovery then requires
+     `hermes kanban unblock <task-id>` — see
+     `scientia-kanban-emit`'s "Recovery" section.
 
-   ```bash
-   if [ ! -e ~/.hermes/skills/"$name" ]; then
-     ln -s "$BUNDLE_ROOT/skills/$name" ~/.hermes/skills/"$name"
-   fi
-   ```
-
-   `$BUNDLE_ROOT` is the scientia clone (e.g.
-   `~/.agents/skills/scientia/`). Resolve it relative to this
+   Symlink **both** trees. `$BUNDLE_ROOT` is the scientia clone (e.g.
+   `~/.agents/skills/scientia/`); resolve it relative to this
    `SKILL.md`'s on-disk location (`../../`).
 
-   Verify with `hermes skills list --source local | grep scientia-` —
-   you should see `scientia-kanban-worker` and `scientia-grill`
-   (plus any other scientia skills you symlinked) as `enabled`.
+   ```bash
+   # 4a — host-global tree (for emit's --skill name validation):
+   mkdir -p ~/.hermes/skills
+   for skill in "$BUNDLE_ROOT"/skills/scientia-*; do
+     name=$(basename "$skill")
+     if [ ! -e ~/.hermes/skills/"$name" ]; then
+       ln -s "$skill" ~/.hermes/skills/"$name"
+     fi
+   done
 
-5. **Smoke-test.** Run `hermes kanban list --json` and verify
-   it returns valid JSON (even if empty). If it errors, report and
-   refuse to mark init complete.
+   # 4b — profile-local trees (for worker-time skill loading):
+   for profile in scientia-implementer scientia-reviewer \
+                  scientia-integrator scientia-aggregator; do
+     PROFILE_SKILLS=~/.hermes/profiles/"$profile"/skills
+     mkdir -p "$PROFILE_SKILLS"
+     for skill in "$BUNDLE_ROOT"/skills/scientia-*; do
+       name=$(basename "$skill")
+       if [ ! -e "$PROFILE_SKILLS/$name" ]; then
+         ln -s "$skill" "$PROFILE_SKILLS/$name"
+       fi
+     done
+   done
+   ```
+
+   Verify with a profile-scoped listing (this is the canonical
+   check — the host-global tree is necessary but not sufficient):
+
+   ```bash
+   hermes -p scientia-implementer skills list --source local \
+     | grep scientia-kanban-worker
+   ```
+
+   You should see `scientia-kanban-worker` (and `scientia-grill`,
+   and any other scientia skills you symlinked) reported as
+   `enabled`. If this command returns empty, the profile-local
+   symlinks are missing and workers will crash on spawn.
+
+5. **Smoke-test.** Two stages — kanban.db reachability first, then
+   per-profile skill resolution.
+
+   **5a — kanban.db reachable.** Run `hermes kanban list --json` and
+   verify it returns valid JSON (even if empty). If it errors,
+   report and refuse to mark init complete.
+
+   **5b — each profile resolves `scientia-kanban-worker`.** This
+   catches the worker-spawn failure mode at init time rather than
+   surfacing it later as `Unknown skill(s)` worker crashes (with
+   tasks parked in `blocked`). For each of the four profiles:
+
+   ```bash
+   for profile in scientia-implementer scientia-reviewer \
+                  scientia-integrator scientia-aggregator; do
+     if ! hermes -p "$profile" skills list --source local \
+            | grep -q scientia-kanban-worker; then
+       echo "init smoke-test failed: $profile cannot resolve scientia-kanban-worker" >&2
+       echo "fix: re-run step 4 (the profile-local symlink loop)" >&2
+       exit 1
+     fi
+   done
+   ```
+
+   Refuse to mark init complete if any profile fails the check.
 
 6. **Apply the concurrency cap.** Read `development/config.yaml` for
    `hermes.max_concurrent_children` (default `3`). Refuse with a clear

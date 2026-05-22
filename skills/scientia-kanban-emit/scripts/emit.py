@@ -34,7 +34,10 @@ from idempotency_key import (  # noqa: E402
     slugify,
     strip_for_hash,
 )
-from profile_models import check_profile_models_drift  # noqa: E402
+from profile_models import (  # noqa: E402
+    check_profile_models_drift,
+    check_profiles_exist,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -1178,7 +1181,7 @@ def preflight(
     hermes_config_path: Path,
     profiles_block: Optional[dict] = None,
     profile_names: Optional[dict] = None,
-    profile_runner=subprocess.run,
+    profile_runner=None,
 ) -> List[str]:
     """Run every preflight gate and collect refusal reasons.
 
@@ -1186,8 +1189,16 @@ def preflight(
 
     `profiles_block` and `profile_names` come from development/config.yaml's
     `hermes.profiles` and `hermes.profile_names`. When `profiles_block` is
-    falsy, the model-config drift check is a no-op (hands-off default).
+    falsy, the model-config drift check is a no-op (hands-off default). The
+    profile-existence gate runs unconditionally (independent of
+    `profiles_block`), since a missing profile would silently strand
+    emitted tasks as `skipped_nonspawnable`.
+
+    `profile_runner` is late-bound to `subprocess.run` when omitted so
+    test patches of `subprocess.run` take effect.
     """
+    if profile_runner is None:
+        profile_runner = subprocess.run
     reasons: List[str] = []
     for reason in (
         check_hermes_on_path(),
@@ -1195,6 +1206,10 @@ def preflight(
         check_concurrency_cap(
             desired=desired_concurrency,
             hermes_config_path=hermes_config_path,
+        ),
+        check_profiles_exist(
+            profile_names=profile_names,
+            runner=profile_runner,
         ),
         check_profile_models_drift(
             profiles_block=profiles_block,

@@ -372,3 +372,57 @@ def check_profile_models_drift(
     if refusal_lines:
         return "\n".join(refusal_lines)
     return None
+
+
+# ---------------------------------------------------------------------------
+# Profile-existence detection (precedes drift detection)
+# ---------------------------------------------------------------------------
+
+
+def check_profiles_exist(
+    *,
+    profile_names: Optional[dict] = None,
+    runner: Callable = subprocess.run,
+) -> Optional[str]:
+    """Preflight gate: refuse if any scientia profile is unknown to Hermes.
+
+    For each role in ROLES, resolves the Hermes profile name (default
+    `scientia-<role>`, or `hermes.profile_names.<role>` if overridden)
+    and probes it with `hermes profile show <name>`. A non-zero exit
+    means the profile is not registered — the dispatcher will park
+    every emitted task as `skipped_nonspawnable` forever.
+
+    Returns None when every required profile resolves. Returns a
+    multi-line refusal listing the missing roles + resolved names
+    otherwise, with a remediation hint pointing at
+    scientia-kanban-init.
+
+    Independent of `check_profile_models_drift`: a profile must exist
+    before any model-config comparison is meaningful. If hermes is not
+    on PATH at all, returns None and defers to `check_hermes_on_path`.
+    """
+    missing: List[Tuple[str, str]] = []  # (role, resolved_name)
+    for role in sorted(ROLES):
+        name = resolve_profile_name(role, profile_names)
+        try:
+            result = runner(
+                ["hermes", "profile", "show", name],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                check=False,
+            )
+        except FileNotFoundError:
+            # hermes binary missing; the hermes-on-path gate will refuse.
+            return None
+        if result.returncode != 0:
+            missing.append((role, name))
+    if not missing:
+        return None
+    bullets = "\n".join(
+        f"  - {name} (role={role})" for (role, name) in missing
+    )
+    return (
+        "Required scientia profiles are not registered with Hermes:\n"
+        + bullets
+        + "\nFix: run `scientia-kanban-init` to create them."
+    )

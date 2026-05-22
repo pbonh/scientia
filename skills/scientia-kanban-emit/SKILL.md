@@ -40,6 +40,17 @@ Refuse to emit if any of:
   in `scientia-kanban-init` step 6.
 - An ADR cited by the spec is `deprecated` or `superseded` without a
   successor — emission would be against a stale decision.
+- **A required scientia profile does not exist.** For each role this
+  emit would assign (`implementer`, `reviewer`, `integrator`,
+  `aggregator`), the resolved profile name (default `scientia-<role>`,
+  or `hermes.profile_names.<role>` if overridden) must be registered
+  with Hermes — `hermes profile show <name>` returns 0. Otherwise the
+  dispatcher will park the emitted tasks as `skipped_nonspawnable`
+  forever. Refuse and tell the user to run `scientia-kanban-init` to
+  create the missing profiles. This gate is independent of
+  the model-config drift check below — drift only applies when
+  `hermes.profiles` is declared, but profile *existence* is required
+  unconditionally.
 - **Profile model config drift.** If `development/config.yaml` declares
   `hermes.profiles.<role>`, the effective value of each declared leaf
   (read via `hermes -p <resolved-name> config show --json`) must match
@@ -199,6 +210,39 @@ Refuse to emit if any of:
 
 10. **Hand off.** Stage transitions to `emitted`. Recommended next
     skill: `scientia-kanban-status` (to inspect as workers run).
+
+## Recovery — when workers crash
+
+A worker process that exits non-zero on spawn (typically: unknown
+skill, missing profile resources, model credentials not configured)
+leaves its task in `blocked` state. The dispatcher will not
+re-promote a `blocked` task even on the next gateway tick — manual
+intervention is required.
+
+**Diagnostics.** Run `hermes kanban dispatch --dry-run --json` and
+look at the `skipped_nonspawnable` and `crashed` arrays. A
+`skipped_nonspawnable` entry usually means the task's assignee
+profile is unknown to Hermes — confirm with
+`hermes profile show <assignee>` (this also drives the
+profile-existence preflight gate). A `crashed` entry means the
+worker started but exited; read its stderr with
+`hermes kanban log <task-id>`. The most common cause seen in
+practice is `Error: Unknown skill(s): scientia-kanban-worker,
+scientia-grill`, which means the profile-local skill symlinks are
+missing — re-run `scientia-kanban-init` step 4 to install them.
+
+**Recovery.** After fixing the underlying cause, re-promote the
+parked tasks and let the dispatcher try again:
+
+```bash
+hermes kanban unblock <task-id> [<task-id> …]
+hermes kanban dispatch --json   # or wait for the next gateway tick
+```
+
+`hermes kanban unblock` is positional-only (no `--task-id` flag);
+pass each id as a positional argument. Re-running emit is a no-op
+for these tasks (the idempotency key already exists) and will not
+itself recover them — you must explicitly `unblock`.
 
 ## Helpers
 
