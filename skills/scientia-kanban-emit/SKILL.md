@@ -1,6 +1,6 @@
 ---
 name: scientia-kanban-emit
-description: Read a verified scientia OpenSpec change, compute idempotency-key triples, pick a collaboration pattern from ADR status, and emit one parent kanban task plus N per-scenario child tasks plus one aggregator task per spec via the Hermes CLI. Inlines the Gherkin scenario, bounded-context glossary excerpt, ADR ids, the implementation checklist, and the required-handoff schema into each task body. Use once verify is clean and the change is on trunk. Re-runnable — produces the same task ids for unchanged content.
+description: Read a verified scientia OpenSpec change and emit two layers of kanban rows via the Hermes CLI — (1) one impl/review/integrate pipeline per `tasks.md` item, with --workspace worktree and `depends on #N` chains wired as --parent edges, and (2) one parent + N per-scenario child pipelines + one aggregator per spec, where each per-scenario impl declares the relevant tasks.md `:integrate` rows as additional --parent edges. Inlines the Gherkin scenario, bounded-context glossary excerpt, ADR ids, the implementation checklist, and the required-handoff schema into each task body. Use once verify is clean and the change is on trunk. Re-runnable — produces the same task ids for unchanged content.
 license: MIT
 metadata:
   bundle: scientia
@@ -12,6 +12,33 @@ metadata:
 
 The main mutator of the kanban phase. Turns a verified, on-trunk
 OpenSpec change into durable rows on `kanban.db`.
+
+Emit happens in two phases per change:
+
+1. **tasks.md items.** Every numbered item in `tasks.md` becomes an
+   `impl → review → integrate` pipeline, with `--workspace worktree`
+   so each worker gets an isolated git worktree to commit into.
+   `(depends on #N)` clauses become `--parent` edges on the impl
+   stage; the integrator merges the worktree back to trunk so the
+   next item in the chain starts from a clean tree that already
+   contains its prereqs' commits.
+
+2. **Per-spec scenarios.** Every Gherkin scenario becomes an
+   `impl → review → integrate` pipeline (under `--workspace
+   dir:<change-dir>`), with a per-spec parent task and per-spec
+   aggregator. Each scenario's impl declares additional `--parent`
+   edges pointing at the `:integrate` stage of every tasks.md item
+   whose `@spec:` markers match the scenario, plus the transitive
+   closure under `depends_on`, plus any tasks.md items with no
+   `@spec` marker and no `depends_on` (root-scaffolding items
+   universal to every scenario).
+
+The two-phase model exists because per-scenario impls can't safely
+start until the shared scaffolding declared in `tasks.md` is on
+trunk. Concurrent scenario workers sharing a single `dir:`
+workspace would otherwise race each other to set up the same
+foundations, ending up with incompatible versions of cross-cutting
+code.
 
 ## Preflight gates
 
@@ -274,7 +301,11 @@ itself recover them — you must explicitly `unblock`.
 
 - Edits spec bodies (except the auto-generated `## Kanban Tasks`
   section). The sha256 hash deliberately excludes that section.
-- Mutates `tasks.md`. The apply phase owns `tasks.md`.
+- Mutates `tasks.md` contents. The apply phase owns the checkbox
+  list; emit only reads from `tasks.md` (parses each `- [ ] **N.**`
+  bullet for `@spec`/`@adr`/`(depends on #N)` markers) and writes
+  per-task index files under
+  `development/tasks/<tenant>/<change>/`.
 - Spawns workers. That is the gateway-hosted dispatcher's job; emit
   only writes rows to `kanban.db`. If the gateway is down the
   preflight refuses, so emit never leaves orphan rows for a missing

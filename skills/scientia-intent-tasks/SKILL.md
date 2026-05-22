@@ -1,6 +1,6 @@
 ---
 name: scientia-intent-tasks
-description: Produce the tasks.md checkbox list for a scientia OpenSpec change. Computes the tasks-stage manifest extension (INVEST/story-splitting/SMART tradeoffs) and decomposes each spec capability into ordered, dependency-aware implementation tasks. Use after ADRs exist and before scientia-intent-verify. tasks.md is the planning artifact OpenSpec apply walks; kanban tasks are emitted separately by scientia-kanban-emit from the Gherkin scenarios.
+description: Produce the tasks.md checkbox list for a scientia OpenSpec change. Computes the tasks-stage manifest extension (INVEST/story-splitting/SMART tradeoffs) and decomposes each spec capability into ordered, dependency-aware implementation tasks. Use after ADRs exist and before scientia-intent-verify. tasks.md is BOTH the planning artifact OpenSpec apply walks AND the source from which scientia-kanban-emit materialises one impl/review/integrate pipeline per item — `(depends on #N)` becomes a kanban --parent edge, and `@spec:` markers wire per-scenario impls to depend on the matching integrate stages.
 license: MIT
 metadata:
   bundle: scientia
@@ -11,11 +11,14 @@ metadata:
 # scientia-intent-tasks
 
 Produce `openspec/changes/<tenant>-<change-id>/tasks.md`: the checkbox
-implementation plan that OpenSpec's `apply` phase consumes. **Not** the
-Hermes Kanban tasks — those are emitted from Gherkin scenarios by
-`scientia-kanban-emit`. This `tasks.md` is the planning artifact and is
-inlined into the kanban parent task body as
-`## Implementation Checklist`.
+implementation plan that OpenSpec's `apply` phase consumes AND the
+source that `scientia-kanban-emit` reads to materialise per-item
+kanban pipelines. Every numbered `- [ ] **N.**` bullet becomes a
+three-stage `impl → review → integrate` Hermes row, with `(depends on
+#N)` translated into `--parent` edges and `@spec: <cap>#<scn>` markers
+used to wire per-scenario impl rows back onto their prerequisite
+items. The full body of `tasks.md` is also inlined into the kanban
+parent task body as `## Implementation Checklist` for reference.
 
 ## Inputs
 
@@ -90,8 +93,9 @@ inlined into the kanban parent task body as
 
    The apply phase ticks each `- [ ]` as `- [x]` once the
    corresponding code change is made. Non-behavioral cross-cutting
-   tasks are kept here (they don't produce kanban rows, but they're
-   part of the change's plan).
+   tasks (docs, CI, scaffolding) also produce kanban rows; the
+   `(depends on #N)` chain typically keeps them late in the
+   pipeline rather than at the front.
 
 4. **Apply the INVEST properties as a self-check.** Every task should
    be Independent, Negotiable, Valuable, Estimable, Small, Testable.
@@ -114,9 +118,11 @@ inlined into the kanban parent task body as
 
 ## What this skill never does
 
-- Emits kanban tasks. That is `scientia-kanban-emit`; the kanban
-  emission unit is the Gherkin scenario, not the `tasks.md`
-  checkbox.
+- Emits kanban tasks. That is `scientia-kanban-emit`. The emission
+  units are *both* the Gherkin scenarios (per-spec impl/review/
+  integrate pipelines) *and* each `- [ ] **N.**` bullet in
+  `tasks.md` (per-item impl/review/integrate pipelines with
+  `(depends on #N)` chains wired as `--parent` edges).
 - Edits spec or design or ADR content. If the decomposition surfaces
   a contradiction, pause and let the user push back upstream — do not
   silently rewrite earlier artifacts.

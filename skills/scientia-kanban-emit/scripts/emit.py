@@ -38,6 +38,13 @@ from profile_models import (  # noqa: E402
     check_profile_models_drift,
     check_profiles_exist,
 )
+from tasks_md import (  # noqa: E402
+    TaskItem,
+    items_for_scenario,
+    parse_tasks_file,
+    shared_infrastructure,
+    topological_order,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -341,6 +348,32 @@ class BodyBundle:
     children: List[TaskBody] = field(default_factory=list)
 
 
+@dataclass
+class TaskItemBody:
+    """A per-tasks.md-item task body — the implementation-plan unit.
+
+    Distinct from `TaskBody` because the source artifact is a single tasks.md
+    bullet, not a Gherkin scenario. Each item drives its own impl/review/
+    integrate pipeline; per-scenario impl rows are then wired to depend on the
+    `:integrate` stage of every task whose `@spec` markers match the scenario,
+    plus universal shared-infrastructure items with no `@spec` marker.
+    """
+    number: int                                # tasks.md "**N.**"
+    title: str
+    body_markdown: str
+    idempotency_key: str                       # base key, before :impl/:review/:integrate suffix
+    depends_on: List[int]                      # tasks.md item numbers this depends on
+    spec_refs: List[tuple]                     # [(capability, scenario_slug), ...]
+    non_behavioral: bool = False
+
+
+@dataclass
+class TaskItemBundle:
+    """Output of `build_task_bodies` — one TaskItemBody per tasks.md item, in
+    topological order so callers can emit them safely."""
+    items: List[TaskItemBody] = field(default_factory=list)
+
+
 def _governing_adrs_section(change_dir: Path) -> str:
     """Render `## Governing ADRs` body — a bullet per ADR file."""
     adr_dir = change_dir / "adr"
@@ -517,6 +550,104 @@ def build_bodies(
     return BodyBundle(parent=parent, aggregator=aggregator, children=children)
 
 
+def _render_task_item_body(
+    *,
+    item: TaskItem,
+    change_slug: str,
+    governing_adrs: str,
+    handoff: str,
+    idempotency_key_value: str,
+) -> str:
+    """Render the body for one tasks.md impl row.
+
+    The body is intentionally narrower than the per-scenario body: tasks.md
+    items are units of *plan*, not units of *acceptance*. They carry their
+    own title and dependency chain, links back to spec scenarios they enable
+    (for traceability — workers should read those specs), and the shared
+    handoff schema. No Gherkin block — that lives on the per-scenario row.
+    """
+    spec_lines = "\n".join(
+        f"- `{ref.capability}#{ref.scenario_slug}`" for ref in item.spec_refs
+    ) or "(none — shared infrastructure)"
+    adr_lines = "\n".join(f"- {adr}" for adr in item.adr_refs) or "(none)"
+    dep_lines = ", ".join(f"#{n}" for n in item.depends_on) or "(none)"
+    nonbeh = " (non-behavioral)" if item.non_behavioral else ""
+
+    return f"""# @tasks-md: {change_slug} item #{item.number}{nonbeh}
+
+## Goal
+{item.title}
+
+## Source
+- tasks.md section: `{item.section or '(unsectioned)'}`
+- tasks.md depends on: {dep_lines}
+
+## Enables (spec scenarios)
+{spec_lines}
+
+## Governing ADRs (item-level)
+{adr_lines}
+
+## Change-level ADRs (full set)
+{governing_adrs}
+
+{handoff}
+
+---
+tasks_md_item: {item.number}
+idempotency_key: {idempotency_key_value}
+"""
+
+
+def build_task_bodies(
+    *,
+    change_dir: Path,
+    change_slug: str,
+    handoff_path: Path,
+) -> TaskItemBundle:
+    """Build per-item TaskItemBody records from `tasks.md`.
+
+    Returns items in topological order — callers can iterate and emit in
+    sequence, knowing that each item's `depends_on` parents have already been
+    emitted (and therefore their task ids are already known).
+
+    If tasks.md is absent the bundle is empty; callers should fall back to
+    the legacy per-scenario-only emit path.
+    """
+    tasks_md_path = change_dir / "tasks.md"
+    if not tasks_md_path.is_file():
+        return TaskItemBundle(items=[])
+
+    raw_items = parse_tasks_file(tasks_md_path)
+    ordered = topological_order(raw_items)
+
+    handoff = handoff_path.read_text(encoding="utf-8").strip()
+    governing_adrs = _governing_adrs_section(change_dir)
+
+    items: List[TaskItemBody] = []
+    for raw in ordered:
+        base_key = f"{change_slug}:{raw.slug}:{raw.hash()}"
+        title = f"[{change_slug}] #{raw.number:02d} — {raw.title}"
+        body = _render_task_item_body(
+            item=raw,
+            change_slug=change_slug,
+            governing_adrs=governing_adrs,
+            handoff=handoff,
+            idempotency_key_value=base_key,
+        )
+        items.append(TaskItemBody(
+            number=raw.number,
+            title=title,
+            body_markdown=body,
+            idempotency_key=base_key,
+            depends_on=list(raw.depends_on),
+            spec_refs=[(s.capability, s.scenario_slug) for s in raw.spec_refs],
+            non_behavioral=raw.non_behavioral,
+        ))
+
+    return TaskItemBundle(items=items)
+
+
 # ---------------------------------------------------------------------------
 # Emission — driving `hermes kanban create`
 # ---------------------------------------------------------------------------
@@ -559,12 +690,14 @@ class TaskRecord:
     writeback step to produce one index file per Hermes task."""
     task_id: str
     idempotency_key: str
-    role: str                        # "parent" | "aggregator" | "child" | "approval"
+    role: str                        # "parent" | "aggregator" | "child" | "approval" | "task-item"
     title: str
     assignee: str
     scenario_slug: Optional[str] = None
     stage: Optional[str] = None      # "impl" | "review" | "integrate" | None
     parent_task_id: Optional[str] = None
+    tasks_md_number: Optional[int] = None   # set for role=="task-item"
+    capability: Optional[str] = None        # set for role=="task-item" or "child" (writeback grouping)
 
 
 @dataclass
@@ -624,6 +757,107 @@ def _stage_title(child_title: str, stage: str) -> str:
     return f"{child_title} — {stage}"
 
 
+def emit_tasks(
+    *,
+    bundle: TaskItemBundle,
+    tenant: str,
+    workspace: str,
+    runner,
+    skills: Optional[List[str]] = None,
+    existing_keys: Optional[dict] = None,
+) -> EmitResult:
+    """Emit the tasks.md impl/review/integrate pipeline for every TaskItemBody.
+
+    Each tasks.md item becomes a 3-stage pipeline:
+
+        impl       (assignee: scientia-implementer)
+          \\__ --parent: every prereq item's :integrate stage
+        review     (assignee: scientia-reviewer)
+          \\__ --parent: this item's :impl
+        integrate  (assignee: scientia-integrator)
+          \\__ --parent: this item's :review
+
+    The :integrate task id is the public signal that other tasks (downstream
+    tasks.md items, or per-scenario impls) depend on. `EmitResult.ids_by_key`
+    maps stage keys (`<base>:impl`/`:review`/`:integrate`) to Hermes task ids.
+
+    `workspace` should typically be the literal string `"worktree"` so each
+    item's worker gets an isolated git worktree to commit into; the integrate
+    stage then merges back to trunk before the next tasks.md item starts.
+    Existing per-scenario rows continue to use `dir:<change_dir>` separately.
+    """
+    skills = skills or ["scientia-kanban-worker", "scientia-grill"]
+    existing_keys = existing_keys or {}
+    refreshed_at = _utcnow_iso()
+    ids: dict = {}
+    records: List[TaskRecord] = []
+
+    pre = list(getattr(runner, "calls", []))
+
+    # Track each item's :integrate task id so later items (and per-scenario
+    # impls) can declare them as --parent. Keyed by tasks.md item number.
+    integrate_ids: dict[int, str] = {}
+
+    def _emit_with_refresh(key: str, body: str, **create_kwargs) -> str:
+        tid = _hermes_create(
+            runner=runner,
+            tenant=tenant,
+            workspace=workspace,
+            idempotency_key=key,
+            body=body,
+            skills=skills,
+            **create_kwargs,
+        )
+        if key in existing_keys:
+            _hermes_comment(
+                runner=runner,
+                tenant=tenant,
+                task_id=tid,
+                body=f"refreshed-at: {refreshed_at}\n\n{body}",
+            )
+        return tid
+
+    for item in bundle.items:
+        # Prereq parents: the :integrate task_id of every item this depends on.
+        # The bundle is in topological order so all such ids are already known.
+        prereq_parents: List[str] = []
+        for dep_num in item.depends_on:
+            dep_int = integrate_ids.get(dep_num)
+            if dep_int is not None:
+                prereq_parents.append(dep_int)
+
+        prev_id: Optional[str] = None
+        for stage, stage_assignee in P2_STAGES:
+            stage_key = f"{item.idempotency_key}:{stage}"
+            stage_title = f"{item.title} — {stage}"
+            parents = list(prereq_parents) if stage == "impl" else []
+            if prev_id is not None:
+                parents.append(prev_id)
+            stage_id = _emit_with_refresh(
+                key=stage_key,
+                body=item.body_markdown,
+                title=stage_title,
+                assignee=stage_assignee,
+                parents=parents,
+            )
+            ids[stage_key] = stage_id
+            records.append(TaskRecord(
+                task_id=stage_id, idempotency_key=stage_key,
+                role="task-item", title=stage_title, assignee=stage_assignee,
+                stage=stage, parent_task_id=prev_id,
+                tasks_md_number=item.number,
+            ))
+            prev_id = stage_id
+
+        integrate_ids[item.number] = prev_id  # last stage = integrate
+
+    commands: List[List[str]] = []
+    if hasattr(runner, "calls"):
+        commands = list(runner.calls[len(pre):])
+
+    return EmitResult(ids_by_key=ids, commands=commands, records=records)
+
+
 def emit_one(
     *,
     bundle: BodyBundle,
@@ -633,6 +867,7 @@ def emit_one(
     runner,
     skills: Optional[List[str]] = None,
     existing_keys: Optional[dict] = None,
+    task_prereqs_by_scenario: Optional[dict] = None,
 ) -> EmitResult:
     """Emit a BodyBundle under the given collaboration pattern.
 
@@ -644,6 +879,13 @@ def emit_one(
     treated as a re-emit — emit_one issues a `hermes kanban comment` with
     the freshly-computed body and a refreshed-at timestamp, since Hermes
     has no `update body` verb.
+
+    `task_prereqs_by_scenario`: optional {scenario_slug: [task_id, ...]} map.
+    For each child whose `scenario_slug` is in the map, the listed task ids
+    are added as additional `--parent` edges on the child's `:impl` stage.
+    Typically these point at the `:integrate` stage of relevant tasks.md
+    rows, so a scenario can't start until its shared-infrastructure prereqs
+    are merged to trunk.
     """
     if pattern == "refuse":
         raise ValueError(
@@ -653,6 +895,7 @@ def emit_one(
 
     skills = skills or ["scientia-kanban-worker", "scientia-grill"]
     existing_keys = existing_keys or {}
+    task_prereqs_by_scenario = task_prereqs_by_scenario or {}
     refreshed_at = _utcnow_iso()
     ids: dict = {}
     commands: List[List[str]] = []
@@ -720,15 +963,23 @@ def emit_one(
     terminal_stage_ids: List[str] = []
     for child in bundle.children:
         prev_id = parent_id
+        # Tasks.md prereqs apply only to the :impl stage (the gating step).
+        # Review/integrate inherit the natural impl→review→integrate chain.
+        extra_impl_parents: List[str] = []
+        if child.scenario_slug and child.scenario_slug in task_prereqs_by_scenario:
+            extra_impl_parents = list(task_prereqs_by_scenario[child.scenario_slug])
         for stage, stage_assignee in P2_STAGES:
             stage_key = f"{child.idempotency_key}:{stage}"
             stage_title = _stage_title(child.title, stage)
+            stage_parents = [prev_id]
+            if stage == "impl":
+                stage_parents.extend(extra_impl_parents)
             stage_id = _emit_with_refresh(
                 key=stage_key,
                 body=child.body_markdown,
                 title=stage_title,
                 assignee=stage_assignee,
-                parents=[prev_id],
+                parents=stage_parents,
             )
             ids[stage_key] = stage_id
             records.append(TaskRecord(
@@ -784,6 +1035,100 @@ def _split_change_id(change_id: str) -> tuple[str, str]:
         )
     tenant, slug = change_id.split("/", 1)
     return tenant, slug
+
+
+def _scenario_prereq_map(
+    *,
+    items: List["TaskItemBody"],
+    ids_by_key: dict,
+) -> dict:
+    """Build a {(capability, scenario_slug): [integrate_task_id, ...]} map.
+
+    For each per-scenario impl row, this map names the tasks.md `:integrate`
+    task ids that must complete before the scenario's impl is allowed to
+    start. Two sources contribute:
+
+    - **Per-scenario prereqs**: items whose `spec_refs` include
+      `(capability, scenario_slug)`, plus their transitive `depends_on`
+      closure (via `tasks_md.items_for_scenario`-equivalent traversal).
+    - **Shared infrastructure**: items with no `@spec` marker that aren't
+      marked non-behavioral. Universal prereqs for every scenario.
+
+    Deduplicated per scenario. Non-behavioral items (docs/CI tail of
+    tasks.md, which depend on the main pipeline rather than the other way
+    around) are excluded from shared infrastructure.
+
+    Returns {} when `items` is empty.
+    """
+    if not items:
+        return {}
+
+    by_number = {item.number: item for item in items}
+
+    # Universal prereqs: items with no `@spec` markers AND no `depends_on`
+    # parents. These are the true root-scaffolding rows that every scenario
+    # impl needs before it can do anything. The set is deliberately narrow
+    # so we don't serialise scenarios on each other's specialty cross-cutting
+    # items — those flow to the relevant scenarios through the
+    # `depends_on` closure below.
+    def _is_universal(item: "TaskItemBody") -> bool:
+        if item.spec_refs:
+            return False
+        return not item.depends_on
+
+    universal = [item for item in items if _is_universal(item)]
+    universal_ids = [
+        ids_by_key[f"{item.idempotency_key}:integrate"]
+        for item in universal
+        if f"{item.idempotency_key}:integrate" in ids_by_key
+    ]
+
+    # Per-scenario closure: walk `depends_on` from each seed item.
+    def _closure(seeds: list) -> list:
+        seen: set = set()
+        stack = list(seeds)
+        out = []
+        while stack:
+            item = stack.pop()
+            if item.number in seen:
+                continue
+            seen.add(item.number)
+            out.append(item)
+            for dep_num in item.depends_on:
+                dep = by_number.get(dep_num)
+                if dep is not None and dep.number not in seen:
+                    stack.append(dep)
+        return out
+
+    out: dict = {}
+    # Collect every (capability, scenario_slug) pair referenced by any item.
+    all_refs: set = set()
+    for item in items:
+        for (cap, scn) in item.spec_refs:
+            all_refs.add((cap, scn))
+
+    for (cap, scn) in all_refs:
+        seeds = [
+            item for item in items
+            if (cap, scn) in item.spec_refs
+        ]
+        closure_items = _closure(seeds)
+        scenario_ids = [
+            ids_by_key[f"{item.idempotency_key}:integrate"]
+            for item in closure_items
+            if f"{item.idempotency_key}:integrate" in ids_by_key
+        ]
+        # Dedupe while preserving order: universals first (foundational),
+        # then per-scenario closure items.
+        seen_ids: set = set()
+        combined: List[str] = []
+        for tid in list(universal_ids) + scenario_ids:
+            if tid not in seen_ids:
+                seen_ids.add(tid)
+                combined.append(tid)
+        out[(cap, scn)] = combined
+
+    return out
 
 
 def _lookup_existing_keys(*, runner, tenant: str) -> dict:
@@ -912,12 +1257,55 @@ def orchestrate(
     total_tasks = 0
     commands: List[List[str]] = []
 
+    # ---- Phase 1: tasks.md items ----
+    # Emit shared-infrastructure rows FIRST so their :integrate task ids are
+    # known when we wire per-scenario impls. If tasks.md is absent, the bundle
+    # is empty and this phase is a no-op (back-compat with pre-tasks.md repos).
+    task_bundle = build_task_bodies(
+        change_dir=change_dir,
+        change_slug=change_slug,
+        handoff_path=handoff_path,
+    )
+    if dry_run:
+        task_existing_keys: dict = {}
+    else:
+        task_existing_keys = _lookup_existing_keys(runner=runner, tenant=tenant)
+
+    task_result: Optional[EmitResult] = None
+    if task_bundle.items:
+        task_result = emit_tasks(
+            bundle=task_bundle,
+            tenant=tenant,
+            workspace="worktree",
+            runner=runner,
+            existing_keys=task_existing_keys,
+        )
+        total_tasks += len(task_result.ids_by_key)
+        commands.extend(task_result.commands)
+
+    # Build the (capability, scenario_slug) → [task integrate task_ids] map
+    # that emit_one needs to wire per-scenario impls.
+    task_prereqs_by_scenario_full = _scenario_prereq_map(
+        items=task_bundle.items,
+        ids_by_key=task_result.ids_by_key if task_result else {},
+    )
+
+    # ---- Phase 2: per-spec scenarios ----
     for spec_path in specs:
+        capability = spec_path.parent.name
         bundle = build_bodies(
             change_dir=change_dir,
             spec_path=spec_path,
             handoff_path=handoff_path,
         )
+
+        # Per-emit_one contract: keys are bare scenario slugs (already unique
+        # within a spec). Filter the full map down to this capability.
+        scenario_prereqs = {
+            scn: task_ids
+            for (cap, scn), task_ids in task_prereqs_by_scenario_full.items()
+            if cap == capability
+        }
 
         if dry_run:
             existing_keys: dict = {}
@@ -931,6 +1319,7 @@ def orchestrate(
             workspace=f"dir:{change_dir.resolve()}",
             runner=runner,
             existing_keys=existing_keys,
+            task_prereqs_by_scenario=scenario_prereqs,
         )
         total_tasks += len(result.ids_by_key)
         commands.extend(result.commands)
@@ -943,7 +1332,6 @@ def orchestrate(
         write_kanban_section(spec_path, principals=principals)
 
         spec_rel = str(spec_path.relative_to(repo_root))
-        capability = spec_path.parent.name
 
         # One index entry per emitted Hermes task — including each pipeline
         # stage — so `development/tasks/<tenant>/<change>/<task_id>.md`
@@ -960,6 +1348,26 @@ def orchestrate(
                 scenario_slug=rec.scenario_slug,
                 parent_task_id=rec.parent_task_id,
                 spec_rel_path=spec_rel,
+                title=rec.title,
+                assignee=rec.assignee,
+            )
+
+    # Tasks.md index entries (cross-spec, since a tasks.md item can serve
+    # multiple capabilities). Written under the tenant/change root, not
+    # nested under a capability.
+    if not dry_run and task_result is not None:
+        for rec in task_result.records:
+            write_index_entry(
+                repo_root=repo_root,
+                tenant=tenant,
+                change_id=change_slug,
+                capability="(tasks.md)",
+                task_id=rec.task_id,
+                idempotency_key=rec.idempotency_key,
+                role=rec.role,
+                scenario_slug=None,
+                parent_task_id=rec.parent_task_id,
+                spec_rel_path=f"openspec/changes/{tenant}-{change_slug}/tasks.md",
                 title=rec.title,
                 assignee=rec.assignee,
             )

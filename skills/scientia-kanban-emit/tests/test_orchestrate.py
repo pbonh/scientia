@@ -169,8 +169,10 @@ class OrchestrateTests(unittest.TestCase):
                 dry_run=False,
                 hermes_config_path=self.root / "hermes_config.yaml",
             )
-        # 1 parent + 2 children * 3 stages + 1 aggregator = 8
-        self.assertEqual(result["tasks"], 8)
+        # tasks.md emit: 1 item * 3 stages = 3
+        # per-spec emit: 1 parent + 2 children * 3 stages + 1 aggregator = 8
+        # total = 11
+        self.assertEqual(result["tasks"], 11)
         self.assertEqual(result["pattern"], "P2-pipeline")
 
     def test_dry_run_does_not_write_files(self):
@@ -235,8 +237,8 @@ class OrchestrateTests(unittest.TestCase):
             )
         tasks_dir = self.root / "development" / "tasks" / "t" / "2026-05-20-test"
         self.assertTrue(tasks_dir.is_dir())
-        # 8 index files (one per emitted task)
-        self.assertEqual(len(list(tasks_dir.glob("*.md"))), 8)
+        # 11 index files: 8 per-spec (parent + 2*3 + aggregator) + 3 tasks.md (1 item * 3 stages)
+        self.assertEqual(len(list(tasks_dir.glob("*.md"))), 11)
         log = (self.root / "development" / "log.md").read_text()
         self.assertIn("scientia-kanban-emit — emitted", log)
         # spec.md has the writeback section now
