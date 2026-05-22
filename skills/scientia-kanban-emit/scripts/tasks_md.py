@@ -37,6 +37,19 @@ _SPEC_RE = re.compile(
 
 _ADR_RE = re.compile(r"@adr:\s*(ADR-\d{3,5})", re.IGNORECASE)
 
+# `@uses-shared:<fully-qualified-type-path>` — repeatable per task. The
+# path runs to the next whitespace, em-dash, comma, or end-of-line. Paths
+# may contain `::`, `/`, `.`, and word characters (Rust/Go/Python style).
+_USES_SHARED_RE = re.compile(
+    r"@uses-shared:\s*(?P<path>[^\s,—]+)",
+)
+
+# `@touches:<relpath>[,<relpath>…]` — comma-separated list of repo-relative
+# paths the implementer expects to modify. Used for emit-wave ordering.
+_TOUCHES_RE = re.compile(
+    r"@touches:\s*(?P<paths>[^\s—]+)",
+)
+
 # `(depends on #1, #2, #3)` — the inner list is one or more #N tokens.
 _DEPENDS_RE = re.compile(
     r"\(depends on\s+(?P<list>#\d+(?:\s*,\s*#\d+)*)\s*\)",
@@ -66,6 +79,8 @@ class TaskItem:
     spec_refs: List[SpecRef] = field(default_factory=list)
     adr_refs: List[str] = field(default_factory=list)
     depends_on: List[int] = field(default_factory=list)
+    uses_shared: List[str] = field(default_factory=list)   # @uses-shared:<path>
+    touches: List[str] = field(default_factory=list)       # @touches:<relpath,…>
     non_behavioral: bool = False
     raw_line: str = ""                         # full source line, for hashing
     checked: bool = False                      # `- [x]` already done?
@@ -85,9 +100,11 @@ class TaskItem:
 
 
 def _strip_markers(body: str) -> str:
-    """Return the task title — body text with @spec/@adr/(depends on) removed."""
+    """Return the task title — body text with @spec/@adr/@uses-shared/@touches/(depends on) removed."""
     text = _SPEC_RE.sub("", body)
     text = _ADR_RE.sub("", text)
+    text = _USES_SHARED_RE.sub("", text)
+    text = _TOUCHES_RE.sub("", text)
     text = _DEPENDS_RE.sub("", text)
     # Collapse the em-dash separator that used to introduce markers, and any
     # double spaces left behind.
@@ -126,6 +143,15 @@ def parse_tasks_md(text: str) -> List[TaskItem]:
         ]
         adr_refs = [adr_m.group(1).upper() for adr_m in _ADR_RE.finditer(body)]
 
+        uses_shared = [m.group("path") for m in _USES_SHARED_RE.finditer(body)]
+
+        touches: List[str] = []
+        for m in _TOUCHES_RE.finditer(body):
+            for raw in m.group("paths").split(","):
+                p = raw.strip()
+                if p:
+                    touches.append(p)
+
         depends_on: List[int] = []
         dep_match = _DEPENDS_RE.search(body)
         if dep_match:
@@ -139,6 +165,8 @@ def parse_tasks_md(text: str) -> List[TaskItem]:
             spec_refs=spec_refs,
             adr_refs=adr_refs,
             depends_on=depends_on,
+            uses_shared=uses_shared,
+            touches=touches,
             non_behavioral=bool(_NON_BEHAVIORAL_RE.search(body)),
             raw_line=line,
             checked=checked,
@@ -199,6 +227,70 @@ def shared_infrastructure(items: List[TaskItem]) -> List[TaskItem]:
     `non_behavioral` on each item.
     """
     return [item for item in items if not item.spec_refs]
+
+
+def wave_topological_order(
+    items: List[TaskItem],
+    max_parallel_per_file_group: int = 2,
+) -> List[Tuple[int, TaskItem]]:
+    """Return `(wave_number, item)` pairs in dependency-then-wave order.
+
+    Built on top of `topological_order`. For each tasks.md item, the wave
+    number is:
+
+        wave = max(
+            wave of every depends_on parent,
+            wave of every earlier item with overlapping @touches: paths
+                that already sits in the *current* wave at slot
+                `max_parallel_per_file_group`,
+        ) + (1 if a same-wave file-group conflict exists, else 0)
+
+    Concretely: tasks with disjoint `@touches` sets run in the same wave
+    (parallel). Tasks with overlapping `@touches` sets get split across
+    waves so at most `max_parallel_per_file_group` of them are in any one
+    wave. Tasks with no `@touches` marker do not contribute to file
+    conflicts (they're treated as unknown-set; callers can choose to
+    serialise them by setting `max_parallel_per_file_group=1` or by
+    listing their files).
+
+    Use case: serialising tasks that all modify the same source file
+    so concurrent integrators don't race on rebase.
+    """
+    if max_parallel_per_file_group < 1:
+        raise ValueError("max_parallel_per_file_group must be >= 1")
+
+    ordered = topological_order(items)
+    item_wave: dict[int, int] = {}
+    # Per-wave map: file path -> count of items in this wave that touch it.
+    wave_file_counts: dict[int, dict[str, int]] = {}
+
+    out: List[Tuple[int, TaskItem]] = []
+    for item in ordered:
+        # Lower bound from dependency parents.
+        parent_wave = 0
+        for dep in item.depends_on:
+            if dep in item_wave:
+                parent_wave = max(parent_wave, item_wave[dep] + 1)
+        # Find the earliest wave (>= parent_wave) where this item can sit
+        # without overflowing any of its file-group counters.
+        wave = parent_wave
+        while True:
+            counts = wave_file_counts.setdefault(wave, {})
+            overflow = False
+            for path in item.touches:
+                if counts.get(path, 0) >= max_parallel_per_file_group:
+                    overflow = True
+                    break
+            if not overflow:
+                # Commit this wave.
+                for path in item.touches:
+                    counts[path] = counts.get(path, 0) + 1
+                break
+            wave += 1
+        item_wave[item.number] = wave
+        out.append((wave, item))
+
+    return out
 
 
 def items_for_scenario(

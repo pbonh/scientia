@@ -40,6 +40,69 @@ workspace would otherwise race each other to set up the same
 foundations, ending up with incompatible versions of cross-cutting
 code.
 
+## File-granular emit waves (the `@touches:` ordering)
+
+Tasks in `tasks.md` may carry one or more `@touches:<relpath>` markers
+naming files the implementer is expected to modify. When emit
+encounters these markers it computes a **wave assignment**: tasks
+that touch disjoint files share a wave (run in parallel), but tasks
+touching the same file are split across waves so at most
+`max_parallel_per_file_group` of them sit in any single wave.
+
+For example: four parallel implementer branches all editing
+`src/stamp.rs` will each rebase against trunk's accumulating
+commits, and every integrator after the first hits a semantic
+conflict. With `@touches:src/stamp.rs` on each and
+`max_parallel_per_file_group: 2`, two of them run in wave 0, the
+other two in wave 1 (with synthetic `depends_on` edges pointing at
+the wave-0 integrate stages), eliminating the race.
+
+Mechanically the wave assignment translates to synthetic
+`depends_on` edges in `build_task_bodies`: each wave-(N+1) item gets
+an extra `--parent <integrate-id>` for every overlapping wave-N
+item. The standard `--parent` machinery then serialises them
+through Hermes. Tasks without `@touches:` markers are unaffected
+(back-compat).
+
+**Configuration.** Wave size is read from
+`development/config.yaml`:
+
+```yaml
+kanban:
+  emit:
+    max_parallel_per_file_group: 2   # default
+```
+
+A value of `1` forces strict serialisation on every shared file
+(maximum safety, minimum parallelism). Higher values allow more
+concurrent work at the cost of more rebase conflicts. Two is a
+reasonable default for most workspaces.
+
+## Shared-type ratification (the `@uses-shared:` gate)
+
+Tasks in `tasks.md` may carry one or more `@uses-shared:<path>`
+markers — see `scientia-intent-tasks/SKILL.md` "Shared-type
+markers". Emit refuses to proceed when any such path is not
+covered by an `accepted` ADR with the path in its `shared_types:`
+frontmatter. Concretely:
+
+- For every tasks.md item, collect `item.uses_shared`.
+- For every ADR in `adr/` with `status: accepted`, collect
+  `frontmatter.shared_types`.
+- Refuse if the union of the former is not a subset of the union
+  of the latter. The refusal names every `(task, path)` pair that
+  failed.
+
+Without the gate, two sibling tasks can each invent their own
+incompatible version of a shared struct or trait; whichever one
+lands on trunk first becomes the de-facto contract, forcing the
+other to be rewritten at integrate time. The gate refuses to emit
+consumers until the contract is explicit and `accepted`.
+
+Producers (tasks that *define* the shared type) reference the ADR
+via `@adr: ADR-NNNN` and don't need `@uses-shared:` for the type
+they own — they're not consumers yet.
+
 ## Preflight gates
 
 Refuse to emit if any of:
@@ -67,6 +130,11 @@ Refuse to emit if any of:
   in `scientia-kanban-init` step 6.
 - An ADR cited by the spec is `deprecated` or `superseded` without a
   successor — emission would be against a stale decision.
+- **A `tasks.md` item carries `@uses-shared:<path>` without a
+  ratifying ADR.** Every `@uses-shared:` path must appear in the
+  `shared_types:` frontmatter of some ADR in `adr/` whose status is
+  `accepted`. Refuse and surface every `(task, path)` pair that
+  failed. See the "Shared-type ratification" section above.
 - **A required scientia profile does not exist.** For each role this
   emit would assign (`implementer`, `reviewer`, `integrator`,
   `aggregator`), the resolved profile name (default `scientia-<role>`,

@@ -249,6 +249,142 @@ class CheckAdrStatusTests(unittest.TestCase):
             self.assertIsNone(emit.check_adr_status(Path(td)))
 
 
+def _write_adr_with_shared_types(
+    dir_path: Path,
+    adr_id: str,
+    status: str,
+    shared_types: list[str],
+    form: str = "block",
+) -> Path:
+    """Write an ADR with the new `shared_types:` field. `form` ∈ {block, inline}."""
+    if form == "inline":
+        shared = f"shared_types: [{', '.join(shared_types)}]\n"
+    else:
+        shared = "shared_types:\n" + "".join(f"  - {p}\n" for p in shared_types)
+    body = (
+        "---\n"
+        f"title: \"{adr_id}: shape\"\n"
+        f"adr_id: {adr_id}\n"
+        f"status: {status}\n"
+        f"{shared}"
+        "---\n\n# ADR\n"
+    )
+    p = dir_path / f"{adr_id.lower().replace('adr-', '')}-shape.md"
+    p.write_text(body)
+    return p
+
+
+def _write_tasks_md(change_dir: Path, items: list[str]) -> Path:
+    text = (
+        "---\ntitle: t\n---\n\n# Implementation Plan\n\n"
+        + "\n".join(items)
+        + "\n"
+    )
+    p = change_dir / "tasks.md"
+    p.write_text(text)
+    return p
+
+
+class CheckAdrSharedTypesTests(unittest.TestCase):
+    """Verifies the `@uses-shared:` gate: an emit must refuse when a task
+    consumes a shared type whose contract is not yet `accepted`."""
+
+    SHARED_TYPE = "pkg/foo.rs::SharedThing"
+
+    def test_passes_when_no_tasks_md(self):
+        with TemporaryDirectory() as td:
+            self.assertIsNone(emit.check_adr_shared_types(Path(td)))
+
+    def test_passes_when_no_uses_shared_markers(self):
+        with TemporaryDirectory() as td:
+            ch = Path(td)
+            _write_tasks_md(ch, ["- [ ] **1.** Do thing — @spec: cap#scn"])
+            self.assertIsNone(emit.check_adr_shared_types(ch))
+
+    def test_refuses_when_uses_shared_without_any_adr(self):
+        with TemporaryDirectory() as td:
+            ch = Path(td)
+            _write_tasks_md(ch, [
+                f"- [ ] **1.** Use shape — @spec: cap#scn @uses-shared:{self.SHARED_TYPE}"
+            ])
+            reason = emit.check_adr_shared_types(ch)
+            self.assertIsNotNone(reason)
+            self.assertIn(self.SHARED_TYPE, reason)
+            self.assertIn("task #1", reason)
+
+    def test_refuses_when_only_proposed_adr_ratifies(self):
+        with TemporaryDirectory() as td:
+            ch = Path(td)
+            adr = ch / "adr"
+            adr.mkdir()
+            _write_adr_with_shared_types(adr, "ADR-0005", "proposed", [self.SHARED_TYPE])
+            _write_tasks_md(ch, [
+                f"- [ ] **1.** Use shape — @uses-shared:{self.SHARED_TYPE}"
+            ])
+            reason = emit.check_adr_shared_types(ch)
+            self.assertIsNotNone(reason)
+
+    def test_passes_when_accepted_adr_ratifies(self):
+        with TemporaryDirectory() as td:
+            ch = Path(td)
+            adr = ch / "adr"
+            adr.mkdir()
+            _write_adr_with_shared_types(adr, "ADR-0005", "accepted", [self.SHARED_TYPE])
+            _write_tasks_md(ch, [
+                f"- [ ] **1.** Use shape — @uses-shared:{self.SHARED_TYPE}"
+            ])
+            self.assertIsNone(emit.check_adr_shared_types(ch))
+
+    def test_passes_with_inline_list_form(self):
+        with TemporaryDirectory() as td:
+            ch = Path(td)
+            adr = ch / "adr"
+            adr.mkdir()
+            _write_adr_with_shared_types(
+                adr, "ADR-0005", "accepted", [self.SHARED_TYPE], form="inline",
+            )
+            _write_tasks_md(ch, [
+                f"- [ ] **1.** Use shape — @uses-shared:{self.SHARED_TYPE}"
+            ])
+            self.assertIsNone(emit.check_adr_shared_types(ch))
+
+    def test_partial_coverage_lists_only_unratified(self):
+        with TemporaryDirectory() as td:
+            ch = Path(td)
+            adr = ch / "adr"
+            adr.mkdir()
+            _write_adr_with_shared_types(adr, "ADR-0005", "accepted", [self.SHARED_TYPE])
+            other = "pkg/lib.rs::SharedOther"
+            _write_tasks_md(ch, [
+                f"- [ ] **1.** Use stamp — @uses-shared:{self.SHARED_TYPE}",
+                f"- [ ] **2.** Use solver — @uses-shared:{other}",
+            ])
+            reason = emit.check_adr_shared_types(ch)
+            self.assertIsNotNone(reason)
+            self.assertIn(other, reason)
+            self.assertNotIn(self.SHARED_TYPE, reason)  # ratified one not flagged
+
+    def test_multiple_consumers_all_refused_when_adr_proposed(self):
+        """Two sibling tasks both consume the same shared type. While the
+        ratifying ADR is still proposed, emit must refuse and name every
+        offending task — not just the first."""
+        with TemporaryDirectory() as td:
+            ch = Path(td)
+            adr = ch / "adr"
+            adr.mkdir()
+            _write_adr_with_shared_types(
+                adr, "ADR-0005", "proposed", [self.SHARED_TYPE],
+            )
+            _write_tasks_md(ch, [
+                f"- [ ] **29.** Consumer A — @uses-shared:{self.SHARED_TYPE}",
+                f"- [ ] **31.** Consumer B — @uses-shared:{self.SHARED_TYPE}",
+            ])
+            reason = emit.check_adr_shared_types(ch)
+            self.assertIsNotNone(reason)
+            self.assertIn("task #29", reason)
+            self.assertIn("task #31", reason)
+
+
 class CheckSpecOnTrunkTests(unittest.TestCase):
     """`git:spec-on-trunk` — every specs/*/spec.md must be reachable from trunk
     (i.e., committed on the default branch). We model this by checking that

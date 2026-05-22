@@ -180,5 +180,161 @@ class ItemsForScenarioTest(unittest.TestCase):
         )
 
 
+USES_SHARED_AND_TOUCHES_SAMPLE = """---
+title: "Tasks: bar"
+---
+
+# Implementation Plan
+
+- [ ] **1.** Define SharedThing — @adr: ADR-0005
+- [ ] **2.** First consumer — @spec: cap-a#scn-1 @uses-shared:pkg/foo.rs::SharedThing @touches:pkg/foo_a.rs
+- [ ] **3.** Second consumer — @spec: cap-b#scn-1 @uses-shared:pkg/foo.rs::SharedThing @uses-shared:pkg/lib.rs::SharedOther @touches:pkg/foo_b.rs,pkg/lib.rs (depends on #1)
+- [ ] **4.** Touch the same files — @spec: cap-b#scn-2 @touches:pkg/foo_b.rs (depends on #1)
+"""
+
+
+class UsesSharedMarkerTest(unittest.TestCase):
+
+    def test_parses_single_uses_shared(self):
+        items = tasks_md.parse_tasks_md(USES_SHARED_AND_TOUCHES_SAMPLE)
+        by_num = {i.number: i for i in items}
+        self.assertEqual(
+            by_num[2].uses_shared,
+            ["pkg/foo.rs::SharedThing"],
+        )
+
+    def test_parses_multiple_uses_shared(self):
+        items = tasks_md.parse_tasks_md(USES_SHARED_AND_TOUCHES_SAMPLE)
+        by_num = {i.number: i for i in items}
+        self.assertEqual(sorted(by_num[3].uses_shared), [
+            "pkg/foo.rs::SharedThing",
+            "pkg/lib.rs::SharedOther",
+        ])
+
+    def test_uses_shared_does_not_leak_into_title(self):
+        items = tasks_md.parse_tasks_md(USES_SHARED_AND_TOUCHES_SAMPLE)
+        by_num = {i.number: i for i in items}
+        self.assertNotIn("@uses-shared", by_num[2].title)
+        self.assertNotIn("@touches", by_num[2].title)
+
+
+class TouchesMarkerTest(unittest.TestCase):
+
+    def test_parses_single_touch(self):
+        items = tasks_md.parse_tasks_md(USES_SHARED_AND_TOUCHES_SAMPLE)
+        by_num = {i.number: i for i in items}
+        self.assertEqual(
+            by_num[2].touches,
+            ["pkg/foo_a.rs"],
+        )
+
+    def test_parses_comma_separated_touches(self):
+        items = tasks_md.parse_tasks_md(USES_SHARED_AND_TOUCHES_SAMPLE)
+        by_num = {i.number: i for i in items}
+        self.assertEqual(sorted(by_num[3].touches), [
+            "pkg/foo_b.rs",
+            "pkg/lib.rs",
+        ])
+
+    def test_absent_marker_is_empty(self):
+        items = tasks_md.parse_tasks_md(USES_SHARED_AND_TOUCHES_SAMPLE)
+        by_num = {i.number: i for i in items}
+        self.assertEqual(by_num[1].touches, [])
+
+
+class WaveOrderingTest(unittest.TestCase):
+
+    def test_disjoint_touches_share_wave_zero(self):
+        items = tasks_md.parse_tasks_md(USES_SHARED_AND_TOUCHES_SAMPLE)
+        # Strip depends_on so we test wave logic in isolation from topo order.
+        items = [
+            tasks_md.TaskItem(number=i.number, title=i.title, section="",
+                              touches=i.touches, raw_line=i.raw_line)
+            for i in items
+        ]
+        waves = tasks_md.wave_topological_order(items, max_parallel_per_file_group=2)
+        wave_of = {item.number: w for w, item in waves}
+        # #1 has no @touches (no constraint), #2 has pkg/foo_a.rs only
+        # — both should sit in wave 0.
+        self.assertEqual(wave_of[1], 0)
+        self.assertEqual(wave_of[2], 0)
+
+    def test_overflow_pushes_to_next_wave(self):
+        # Three items all touching the same file with max_parallel=2
+        # → 2 in wave 0, 1 in wave 1.
+        items = [
+            tasks_md.TaskItem(number=1, title="a", section="",
+                              touches=["src/x.rs"], raw_line="- [ ] **1.** a @touches:src/x.rs"),
+            tasks_md.TaskItem(number=2, title="b", section="",
+                              touches=["src/x.rs"], raw_line="- [ ] **2.** b @touches:src/x.rs"),
+            tasks_md.TaskItem(number=3, title="c", section="",
+                              touches=["src/x.rs"], raw_line="- [ ] **3.** c @touches:src/x.rs"),
+        ]
+        waves = tasks_md.wave_topological_order(items, max_parallel_per_file_group=2)
+        wave_of = {item.number: w for w, item in waves}
+        self.assertEqual(wave_of[1], 0)
+        self.assertEqual(wave_of[2], 0)
+        self.assertEqual(wave_of[3], 1)
+
+    def test_disjoint_files_parallel_under_overflow(self):
+        # Three items, two share src/a.rs, one is on src/b.rs.
+        # With max_parallel=2: #1, #2 share wave 0 (src/a.rs slots 1/2);
+        # #3 (src/b.rs) also fits in wave 0.
+        items = [
+            tasks_md.TaskItem(number=1, title="a", section="",
+                              touches=["src/a.rs"], raw_line="- [ ] **1.**"),
+            tasks_md.TaskItem(number=2, title="b", section="",
+                              touches=["src/a.rs"], raw_line="- [ ] **2.**"),
+            tasks_md.TaskItem(number=3, title="c", section="",
+                              touches=["src/b.rs"], raw_line="- [ ] **3.**"),
+        ]
+        waves = tasks_md.wave_topological_order(items, max_parallel_per_file_group=2)
+        wave_of = {item.number: w for w, item in waves}
+        self.assertEqual(wave_of[1], 0)
+        self.assertEqual(wave_of[2], 0)
+        self.assertEqual(wave_of[3], 0)
+
+    def test_max_one_forces_serial(self):
+        items = [
+            tasks_md.TaskItem(number=1, title="a", section="",
+                              touches=["src/x.rs"], raw_line="- [ ] **1.**"),
+            tasks_md.TaskItem(number=2, title="b", section="",
+                              touches=["src/x.rs"], raw_line="- [ ] **2.**"),
+            tasks_md.TaskItem(number=3, title="c", section="",
+                              touches=["src/x.rs"], raw_line="- [ ] **3.**"),
+        ]
+        waves = tasks_md.wave_topological_order(items, max_parallel_per_file_group=1)
+        wave_of = {item.number: w for w, item in waves}
+        self.assertEqual(wave_of[1], 0)
+        self.assertEqual(wave_of[2], 1)
+        self.assertEqual(wave_of[3], 2)
+
+    def test_depends_on_lower_bound_respected(self):
+        # #2 depends on #1 — even if both touch disjoint files, #2 must be in
+        # a later wave.
+        items = [
+            tasks_md.TaskItem(number=1, title="a", section="",
+                              touches=["src/a.rs"], raw_line="- [ ] **1.**"),
+            tasks_md.TaskItem(number=2, title="b", section="",
+                              touches=["src/b.rs"], depends_on=[1],
+                              raw_line="- [ ] **2.**"),
+        ]
+        waves = tasks_md.wave_topological_order(items)
+        wave_of = {item.number: w for w, item in waves}
+        self.assertEqual(wave_of[1], 0)
+        self.assertEqual(wave_of[2], 1)
+
+    def test_no_touches_means_no_file_conflict(self):
+        items = [
+            tasks_md.TaskItem(number=1, title="a", section="", raw_line="- [ ] **1.**"),
+            tasks_md.TaskItem(number=2, title="b", section="", raw_line="- [ ] **2.**"),
+            tasks_md.TaskItem(number=3, title="c", section="", raw_line="- [ ] **3.**"),
+        ]
+        waves = tasks_md.wave_topological_order(items, max_parallel_per_file_group=1)
+        # No @touches means no file-group counter, so all share wave 0.
+        for _, item in waves:
+            self.assertEqual(0, [w for w, i in waves if i.number == item.number][0])
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -48,6 +48,10 @@ Capture the significant decisions named in `design.md`'s
       superseded_by: null           # filled by a future ADR if/when superseded
       asr:                          # the architecturally significant requirement
         - "<one-line ASR>"
+      shared_types: []              # fully-qualified type paths this ADR ratifies
+                                    # e.g. <crate>/src/<module>.rs::<TypeName>
+                                    # Until status=accepted, scientia-kanban-emit refuses to
+                                    # emit any tasks.md item marked `@uses-shared:<one-of-these>`.
       tags: [<bounded-context-tag>, <other-tags>]
       created: <YYYY-MM-DD>
       ---
@@ -117,12 +121,39 @@ Capture the significant decisions named in `design.md`'s
 5. **Hand off.** Stage transitions to `adr`. Next recommended skill:
    `scientia-intent-tasks`.
 
+## Shared types (the `shared_types:` field)
+
+When an ADR ratifies the shape of a type that crosses task
+boundaries — a struct, enum, trait, or interface that multiple
+in-flight implementation tasks will *consume* — list its
+fully-qualified path under `shared_types:`. The path is the
+source-location form the host language permits, e.g.
+`<crate>/src/<module>.rs::<TypeName>` for Rust,
+`pkg/<module>.go::<TypeName>` for Go, or
+`<package>/<module>.py::<TypeName>` for Python.
+
+This field is the **contract** that `scientia-kanban-emit` enforces:
+no task carrying an `@uses-shared:<path>` marker may be emitted
+until an `accepted` ADR with `<path>` in its `shared_types:`
+exists. Without the gate, sibling tasks can each invent their own
+incompatible version of the same struct or trait, and only
+discover the conflict at integrate time — by which point the later
+branch needs a full rewrite to match whatever shape landed first.
+
+Until the user flips the ADR to `accepted`, consumer tasks
+cannot enter the dispatcher. This is intentional: a `proposed`
+type contract is not a contract.
+
 ## Gates
 
 - Refuse to draft if `design.md` does not exist.
 - Refuse to edit an `accepted` ADR's body. The only legal mutations
   on an accepted ADR are: status → `deprecated`, `superseded_by:`
   pointer to a successor. Body and Y-statement are frozen.
+- The `shared_types:` field is part of the body and follows the same
+  immutability rule — once an ADR is `accepted`, its `shared_types:`
+  set is frozen. Adding or removing a shared type requires
+  supersession.
 
 ## What this skill never does
 

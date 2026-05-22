@@ -39,6 +39,7 @@ from profile_models import (  # noqa: E402
     check_profiles_exist,
 )
 from tasks_md import (  # noqa: E402
+    wave_topological_order,
     TaskItem,
     items_for_scenario,
     parse_tasks_file,
@@ -233,6 +234,110 @@ def check_adr_status(change_dir: Path) -> Optional[str]:
 
     if bad:
         return "Stale ADRs cited: " + "; ".join(bad)
+    return None
+
+
+def _read_adr_shared_types(adr_file: Path) -> List[str]:
+    """Parse the ADR's `shared_types:` field (inline list or block form).
+
+    `_read_frontmatter` deliberately ignores nested/indented frontmatter
+    lines, so it can't see a `shared_types:` block list. This helper does
+    a focused second pass on the frontmatter section.
+
+    Returns the list of fully-qualified type paths, or [] if absent.
+    """
+    text = adr_file.read_text(encoding="utf-8")
+    m = _FRONTMATTER_RE.match(text)
+    if not m:
+        return []
+    fm = m.group(1)
+    lines = fm.splitlines()
+    out: List[str] = []
+    in_block = False
+    for line in lines:
+        stripped = line.strip()
+        if not in_block:
+            if stripped.startswith("shared_types:"):
+                rest = stripped[len("shared_types:"):].strip()
+                if rest.startswith("[") and rest.endswith("]"):
+                    inner = rest[1:-1].strip()
+                    if inner:
+                        for p in inner.split(","):
+                            t = p.strip().strip('"').strip("'")
+                            if t:
+                                out.append(t)
+                    return out
+                if rest in ("", "null", "~"):
+                    in_block = True
+                    continue
+                # bare scalar (single path on one line) — accept it
+                out.append(rest.strip('"').strip("'"))
+                return out
+        else:
+            if not line.startswith(" ") and not line.startswith("\t"):
+                # Out of the block — next top-level key.
+                break
+            if stripped.startswith("- "):
+                t = stripped[2:].strip().strip('"').strip("'")
+                if t:
+                    out.append(t)
+            elif not stripped:
+                continue
+            else:
+                # mapping or unrecognised — bail out defensively
+                break
+    return out
+
+
+def check_adr_shared_types(change_dir: Path) -> Optional[str]:
+    """Refuse if any tasks.md item has `@uses-shared:<path>` without an
+    *accepted* ADR ratifying that path under its `shared_types:`.
+
+    Without this gate, sibling implementer branches can each invent
+    their own version of a shared type and only discover the
+    incompatibility at integrate time — by which point the later
+    branch needs a full rewrite to match whatever shape landed
+    first. The gate forces shared-type contracts to be ratified in
+    an `accepted` ADR before any consumer task can be emitted.
+
+    The gate is a no-op when no `@uses-shared:` markers exist (legacy
+    tasks.md files); it only fires when the marker is present and
+    unmatched. Producer tasks (the one whose work defines a shared
+    type) use `@adr: ADR-NNNN` and don't need `@uses-shared:` — they
+    aren't consumers yet.
+    """
+    tasks_md_path = change_dir / "tasks.md"
+    if not tasks_md_path.is_file():
+        return None
+    adr_dir = change_dir / "adr"
+    if not adr_dir.is_dir():
+        # No ADRs at all is acceptable per check_adr_status; the gate
+        # only fires if a consumer marker exists.
+        accepted_paths: set[str] = set()
+    else:
+        accepted_paths = set()
+        for adr_file in adr_dir.glob("*.md"):
+            fm = _read_frontmatter(adr_file.read_text(encoding="utf-8"))
+            status = (fm.get("status") or "").lower()
+            if status != "accepted":
+                continue
+            for path in _read_adr_shared_types(adr_file):
+                accepted_paths.add(path)
+
+    items = parse_tasks_file(tasks_md_path)
+    missing: List[str] = []
+    for item in items:
+        for path in item.uses_shared:
+            if path not in accepted_paths:
+                missing.append(f"task #{item.number} uses `{path}` (no accepted ADR ratifies it)")
+
+    if missing:
+        return (
+            "Unratified shared types: " + "; ".join(missing)
+            + ". Promote the ratifying ADR to `status: accepted` (or supersede it) "
+            "before re-emitting. See `scientia-intent-adr/SKILL.md` "
+            "'Shared types' for the contract."
+        )
     return None
 
 
@@ -599,11 +704,84 @@ idempotency_key: {idempotency_key_value}
 """
 
 
+def _augment_with_wave_deps(
+    items: List[TaskItem],
+    max_parallel_per_file_group: int,
+) -> List[TaskItem]:
+    """Insert synthetic `depends_on` edges so wave-(N+1) items wait on the
+    wave-N items they overlap on file-touch.
+
+    When multiple in-flight branches touch the same file, every
+    integrator after the first hits a rebase conflict. Computing
+    wave assignments by file-overlap and inserting cross-wave deps
+    serialises them via the existing --parent edge mechanism, so
+    only one of an overlapping group is ever in flight at a time.
+
+    A no-op when no item carries `@touches:` markers.
+    """
+    if not any(item.touches for item in items):
+        return items
+
+    wave_pairs = wave_topological_order(
+        items, max_parallel_per_file_group=max_parallel_per_file_group,
+    )
+    wave_of = {item.number: w for w, item in wave_pairs}
+
+    # Group items by wave for fast lookup.
+    by_wave: dict[int, list[TaskItem]] = {}
+    for w, item in wave_pairs:
+        by_wave.setdefault(w, []).append(item)
+
+    augmented: list[TaskItem] = []
+    for item in items:
+        w = wave_of[item.number]
+        if w == 0 or not item.touches:
+            augmented.append(item)
+            continue
+        prev_wave = by_wave.get(w - 1, [])
+        new_deps = list(item.depends_on)
+        touched = set(item.touches)
+        for prev in prev_wave:
+            if set(prev.touches) & touched and prev.number not in new_deps:
+                new_deps.append(prev.number)
+        if new_deps == item.depends_on:
+            augmented.append(item)
+        else:
+            augmented.append(TaskItem(
+                number=item.number,
+                title=item.title,
+                section=item.section,
+                spec_refs=list(item.spec_refs),
+                adr_refs=list(item.adr_refs),
+                depends_on=new_deps,
+                uses_shared=list(item.uses_shared),
+                touches=list(item.touches),
+                non_behavioral=item.non_behavioral,
+                raw_line=item.raw_line,  # preserved — idempotency hash is stable
+                checked=item.checked,
+            ))
+    return augmented
+
+
+def _wave_size_from_config(config: dict | None) -> int:
+    if not isinstance(config, dict):
+        return 2
+    kanban = config.get("kanban") or {}
+    emit_cfg = (kanban.get("emit") or {}) if isinstance(kanban, dict) else {}
+    raw = emit_cfg.get("max_parallel_per_file_group") if isinstance(emit_cfg, dict) else None
+    try:
+        v = int(raw)
+        return v if v >= 1 else 2
+    except (TypeError, ValueError):
+        return 2
+
+
 def build_task_bodies(
     *,
     change_dir: Path,
     change_slug: str,
     handoff_path: Path,
+    config: dict | None = None,
 ) -> TaskItemBundle:
     """Build per-item TaskItemBody records from `tasks.md`.
 
@@ -613,12 +791,20 @@ def build_task_bodies(
 
     If tasks.md is absent the bundle is empty; callers should fall back to
     the legacy per-scenario-only emit path.
+
+    When tasks.md carries `@touches:` markers, this function inserts
+    synthetic cross-wave `depends_on` edges so that overlapping-file
+    tasks serialise via the standard --parent mechanism. The wave size
+    is read from `config['kanban']['emit']['max_parallel_per_file_group']`,
+    default 2.
     """
     tasks_md_path = change_dir / "tasks.md"
     if not tasks_md_path.is_file():
         return TaskItemBundle(items=[])
 
     raw_items = parse_tasks_file(tasks_md_path)
+    wave_size = _wave_size_from_config(config)
+    raw_items = _augment_with_wave_deps(raw_items, wave_size)
     ordered = topological_order(raw_items)
 
     handoff = handoff_path.read_text(encoding="utf-8").strip()
@@ -1265,6 +1451,7 @@ def orchestrate(
         change_dir=change_dir,
         change_slug=change_slug,
         handoff_path=handoff_path,
+        config=config,
     )
     if dry_run:
         task_existing_keys: dict = {}
@@ -1626,6 +1813,7 @@ def preflight(
         ),
         check_verify_severity(change_dir, block_on=block_on_severity),
         check_adr_status(change_dir),
+        check_adr_shared_types(change_dir),
         check_spec_on_trunk(change_dir, trunk=trunk),
     ):
         if reason is not None:

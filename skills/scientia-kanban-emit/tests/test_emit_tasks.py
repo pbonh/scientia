@@ -145,6 +145,69 @@ class BuildTaskBodiesTest(unittest.TestCase):
                     body.idempotency_key,
                 )
 
+    def test_wave_dep_augmentation_for_overlapping_touches(self):
+        """Three tasks all touching the same file, max_parallel=2 → #3 gets a
+        synthetic depends_on edge to #1 or #2 (serialising the shared-file
+        work onto a second wave).
+        """
+        tasks_md_body = """---
+title: t
+---
+
+# Implementation Plan
+
+## Capability: cap
+- [ ] **1.** First touch — @spec: cap#a @touches:src/shared.rs
+- [ ] **2.** Second touch — @spec: cap#b @touches:src/shared.rs
+- [ ] **3.** Third touch — @spec: cap#c @touches:src/shared.rs
+"""
+        with TemporaryDirectory() as td:
+            tmp = Path(td)
+            change_dir = tmp / "openspec" / "changes" / "foo-2026-01-01-bar"
+            change_dir.mkdir(parents=True)
+            (change_dir / "tasks.md").write_text(tasks_md_body, encoding="utf-8")
+            (change_dir / "adr").mkdir()
+            handoff = tmp / "HANDOFF.md"
+            handoff.write_text(HANDOFF_MD, encoding="utf-8")
+
+            bundle = emit.build_task_bodies(
+                change_dir=change_dir,
+                change_slug="2026-01-01-bar",
+                handoff_path=handoff,
+                config={"kanban": {"emit": {"max_parallel_per_file_group": 2}}},
+            )
+        by_num = {b.number: b for b in bundle.items}
+        # #1 stays at wave 0 with no deps
+        self.assertEqual(by_num[1].depends_on, [])
+        # #2 also wave 0 (slot 2 of 2)
+        self.assertEqual(by_num[2].depends_on, [])
+        # #3 pushed to wave 1, gets synthetic edges to overlapping wave-0 items
+        self.assertNotEqual(by_num[3].depends_on, [])
+        for dep in by_num[3].depends_on:
+            self.assertIn(dep, [1, 2])
+
+    def test_wave_no_op_when_no_touches_markers(self):
+        """tasks.md without any @touches: markers behaves exactly as before
+        (back-compat for existing changes).
+        """
+        with TemporaryDirectory() as td:
+            tmp = Path(td)
+            change_dir = _make_change(tmp)
+            handoff = tmp / "HANDOFF.md"
+            handoff.write_text(HANDOFF_MD, encoding="utf-8")
+
+            bundle = emit.build_task_bodies(
+                change_dir=change_dir,
+                change_slug="2026-01-01-foo",
+                handoff_path=handoff,
+                config={"kanban": {"emit": {"max_parallel_per_file_group": 1}}},
+            )
+        # tasks.md fixture has no @touches: — augmentation is a no-op.
+        by_num = {b.number: b for b in bundle.items}
+        self.assertEqual(by_num[1].depends_on, [])
+        self.assertEqual(by_num[2].depends_on, [1])
+        self.assertEqual(by_num[3].depends_on, [2])
+
     def test_empty_bundle_when_no_tasks_md(self):
         with TemporaryDirectory() as td:
             tmp = Path(td)

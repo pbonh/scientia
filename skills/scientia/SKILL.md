@@ -77,6 +77,21 @@ diagram and stage descriptions.
    - `openspec/changes/*/` → which changes are in flight?
    - `hermes kanban list` → which tasks are running per tenant?
 
+   **If any tenant reports `blocked > 0`**, run the blocked-task sweep
+   *before* offering next actions:
+
+   ```bash
+   python3 /path/to/skills/scientia/scripts/sweep_blocked.py --repo "$(pwd)"
+   ```
+
+   The sweep surfaces (a) blocked tasks whose work has actually
+   resolved and are safe to `unblock`, (b) refused tasks with the
+   specific gate failure, and (c) parent-child deadlock cycles —
+   blocked parent ↔ todo child where the child is parented to the
+   blocked parent, which can never dispatch. The sweep is read-only
+   by default; pass `--apply` to execute the printed commands after
+   confirmation.
+
 2. **Present valid next actions.** Cross-reference detected state against
    [references/SKILL_MAP.md](references/SKILL_MAP.md). Show the user the
    set of valid next phase skills, with a recommended default.
@@ -93,6 +108,46 @@ diagram and stage descriptions.
    lives in `wiki/`, `development/`, `openspec/`, and `kanban.db`. Do
    not invent a separate state file. Re-running this skill from scratch
    in a new session must produce the same next-action set.
+
+## Boundaries (never do)
+
+Two recurring orchestrator-overreach patterns produce false-progress
+loops that stall the board: editing worker branches directly, and
+unblocking integrators before the underlying conflict has actually
+been resolved. Both ship untested code under the integrator's
+approval signature and lead to unblock → block → unblock cycles.
+The following are hard prohibitions, not guidelines:
+
+- **Never edit a worker branch.** Rebase conflicts, clippy
+  regressions, dangling `let` bindings, stale comments on
+  `impl/*` branches — none of these are orchestrator hand-fixes.
+  Even a one-line "trivial" patch bypasses the
+  implementer → reviewer → integrator chain and ships untested
+  code under the integrator's approval signature. Conflict
+  resolution is the implementer's job; surface the conflict so an
+  implementer respawn can do it.
+
+- **Never call `hermes kanban unblock <id>` directly.** Always
+  gate the call through `scripts/unblock_gate.py <id>`:
+
+  ```bash
+  python3 .../skills/scientia/scripts/unblock_gate.py <task-id>
+  ```
+
+  The script returns exit 0 plus the safe unblock command iff
+  every gate passes (task is blocked, branch HEAD advanced past
+  the blocking handoff, every `--parent` is `done`, no fresh
+  REQUEST CHANGES from the reviewer). On a refuse, fix the
+  underlying problem before re-running. Override
+  (`--allow-stale-head`) is reserved for the case where you have
+  *just* merged the unblocking work and the local mirror has not
+  yet caught up.
+
+- **Never create the implementer respawn task as a child of the
+  blocked integrator.** Per `scientia-integrator.md` "On rebase
+  conflicts", the respawn must be parented to the *reviewer*
+  (already `done`), never to the blocked integrator — otherwise
+  the parent-child deadlock pattern strands the board.
 
 ## Detected-state → next-action matrix (summary)
 

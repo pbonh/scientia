@@ -168,3 +168,15 @@ Every scientia task body follows this fixed structure. Read in order:
 - Consults external state. If it is not in the task body, the
   comment thread, parent results, or your profile's memory, it
   effectively does not exist.
+- **Creates child tasks of itself.** A worker that is about to block
+  must not also create downstream tasks with `--parent <self_id>` —
+  those tasks would be undispatchable until the worker un-blocks,
+  which is exactly what they're meant to enable. The result is a
+  parent-child deadlock that requires manual `hermes kanban unlink`
+  recovery and can stall a board for hours. If you need work to
+  happen before you can finish, block with a precise handoff and
+  let the orchestrator (or a human reading the handoff) emit the
+  unblocking task as a sibling — parented to your *upstream* stage,
+  never to you. See `scientia-integrator.md` "On rebase conflicts"
+  for the worked example most workers encounter (integrators
+  respawning implementers after a trunk rebase fails).

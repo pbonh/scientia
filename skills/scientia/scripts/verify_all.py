@@ -316,6 +316,110 @@ def hash_spec_body(spec_path: Path) -> str | None:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
+FMT_PROBES = [
+    # (manifest file or signal, command, language label)
+    ("Cargo.toml",     ["cargo", "fmt", "--all", "--", "--check"], "rust (cargo fmt)"),
+    ("go.mod",         ["gofmt", "-l", "."],                        "go (gofmt)"),
+    ("pyproject.toml", ["ruff", "format", "--check", "."],          "python (ruff format)"),
+]
+
+
+def gate_trunk_fmt_drift(report: Report, repo: Path) -> None:
+    """Emit a WARN finding when the host language's format-check fails on
+    trunk independent of any in-flight change.
+
+    A pre-existing fmt violation on trunk shows up as a noise finding
+    on every integrator preflight, drowning out real regressions and
+    slowing triage. Detecting it here lets the next change include a
+    one-commit fmt-fix item at the head of `tasks.md` (see
+    `scientia-intent-tasks` "Pre-emit fmt-baseline injection").
+
+    Non-blocking by default (WARN). Promote to ERROR via
+    `verify.block_on_severity: warning` in development/config.yaml.
+    """
+    for manifest, cmd, label in FMT_PROBES:
+        if not (repo / manifest).exists():
+            continue
+        if shutil.which(cmd[0]) is None:
+            report.add(
+                "trunk-fmt-drift",
+                "suggestion",
+                f"{label} probe present but {cmd[0]!r} not on PATH; cannot check",
+            )
+            continue
+        try:
+            r = subprocess.run(
+                cmd, cwd=repo, capture_output=True, text=True, check=False, timeout=120,
+            )
+        except Exception as exc:
+            report.add(
+                "trunk-fmt-drift",
+                "suggestion",
+                f"{label} check crashed: {exc}",
+            )
+            continue
+        # gofmt is special: non-zero only on argument errors, drift is
+        # signaled by non-empty stdout.
+        drifted = (r.returncode != 0) or (cmd[0] == "gofmt" and r.stdout.strip())
+        if drifted:
+            head = (r.stdout or r.stderr).strip().splitlines()
+            tail = head[-1] if head else "(no output)"
+            report.add(
+                "trunk-fmt-drift",
+                "warning",
+                f"{label} reports drift on trunk: {tail[:200]}. "
+                "Inject a fmt-fix #0 task per scientia-intent-tasks "
+                "'Pre-emit fmt-baseline injection' before emitting "
+                "behavioral changes.",
+            )
+
+
+def gate_blocked_sweep(report: Report, repo: Path) -> None:
+    """Run sweep_blocked.py as an informational gate.
+
+    Surfaces (a) parent-child deadlock cycles (worker blocked with
+    its respawn linked as its own child) and (b) blocked tasks whose
+    underlying work has resolved but which Hermes has not
+    auto-promoted (`blocked` does not transition back to `ready` on
+    its own). Both are reported as WARN-severity so CI flags them
+    without blocking, unless the user has set
+    `verify.block_on_severity: warning` in development/config.yaml.
+    """
+    sweep_script = Path(__file__).parent / "sweep_blocked.py"
+    if not sweep_script.is_file():
+        return
+    if shutil.which("hermes") is None:
+        return  # silently skip when Hermes isn't installed
+    try:
+        r = subprocess.run(
+            ["python3", str(sweep_script), "--repo", str(repo), "--json"],
+            capture_output=True, text=True, check=False, timeout=60,
+        )
+    except Exception as exc:
+        report.add("blocked-sweep", "suggestion",
+                   f"sweep_blocked.py crashed: {exc}")
+        return
+    try:
+        data = json.loads(r.stdout)
+    except json.JSONDecodeError:
+        return
+    for deadlock in data.get("deadlocks") or []:
+        report.add(
+            "blocked-sweep",
+            "warning",
+            f"deadlock: blocked parent {deadlock.get('parent')} ↔ todo child "
+            f"{deadlock.get('child')} — child cannot dispatch until parent is `done`. "
+            f"Recovery: hermes kanban unlink {deadlock.get('parent')} {deadlock.get('child')}",
+        )
+    for tid in data.get("safe_unblocks") or []:
+        report.add(
+            "blocked-sweep",
+            "warning",
+            f"task {tid} is blocked but its blocker has resolved — safe to "
+            f"`hermes kanban unblock {tid}` (Hermes does not auto-promote).",
+        )
+
+
 def gate_schema_version(report: Report, repo: Path) -> None:
     cfg = repo / "development" / "config.yaml"
     if not cfg.exists():
@@ -356,6 +460,8 @@ def main() -> int:
     gate_openspec_verify(report, repo)
     gate_spec_on_trunk(report, repo)
     gate_idempotency_drift(report, repo)
+    gate_blocked_sweep(report, repo)
+    gate_trunk_fmt_drift(report, repo)
 
     threshold = read_threshold(repo, args.threshold)
     worst = report.worst()
