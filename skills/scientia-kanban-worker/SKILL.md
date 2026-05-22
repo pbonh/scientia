@@ -55,10 +55,35 @@ Concretely:
   to type "I can do A, B, or C — which do you prefer?", you must
   instead pick one (justify in a comment) or block (citing the
   alternatives in the handoff).
-- **End the turn with an action, not a question.** Your final tool
-  call should be `hermes kanban complete` or `hermes kanban block`
-  on this task. If neither has been called, you have failed the
-  task — the dispatcher will time you out and crash-retry.
+- **Every assistant turn must contain at least one tool call until
+  you have called `hermes kanban complete` or `hermes kanban block`
+  on this task.** A text-only assistant turn — even one that says
+  "the task is complete" or "I'm done" — ends the worker process
+  with exit code 0 *without* closing the kanban row. The dispatcher
+  records a `protocol_violation` event, marks the task `gave_up`
+  (`failures: 1, effective_limit: 1`), and **will not respawn you**
+  until a human runs `hermes kanban unblock <id>`. This is the
+  single most common scientia worker failure mode; it is
+  silent-by-design and indistinguishable in worker logs from a
+  successful run (`Messages: 1, 0 tool calls`). Do not let your turn
+  end with text alone.
+- **Before writing "done" / "complete" / "finished" / "implemented"
+  in text, you MUST have *already* issued `hermes kanban complete
+  <id>` earlier in the same turn.** Prose is not a completion
+  signal — only the `complete` tool call moves the row to `done`.
+  If you have nothing left to do but cannot honestly call
+  `complete` (tests fail, ambiguity surfaced, dependency missing),
+  call `hermes kanban block <id> --reason "…"` instead. Never end
+  on prose.
+- **Pre-exit self-check.** Before what you intend to be your last
+  assistant turn, answer in your own reasoning: *"Did I call
+  `hermes kanban complete <id>` or `hermes kanban block <id>` with
+  this task's id in this conversation?"* If you cannot point to the
+  exact tool call, you have not finished — make the call now. When
+  in doubt between `complete` and `block`, block — `complete` is a
+  promise to downstream tasks that this work is mergeable, and
+  recovery from a false `complete` is more expensive than recovery
+  from a precautionary `block`.
 
 This applies to *every* scientia profile (`implementer`, `reviewer`,
 `integrator`, `aggregator`) regardless of role. The role decides

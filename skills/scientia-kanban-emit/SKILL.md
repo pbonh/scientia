@@ -238,13 +238,28 @@ Refuse to emit if any of:
 10. **Hand off.** Stage transitions to `emitted`. Recommended next
     skill: `scientia-kanban-status` (to inspect as workers run).
 
-## Recovery — when workers crash
+## Recovery — when workers crash or violate the protocol
 
-A worker process that exits non-zero on spawn (typically: unknown
-skill, missing profile resources, model credentials not configured)
-leaves its task in `blocked` state. The dispatcher will not
-re-promote a `blocked` task even on the next gateway tick — manual
-intervention is required.
+A worker that fails to call `hermes kanban complete` or `hermes
+kanban block` before its process exits leaves its task parked. The
+dispatcher will not re-promote it on the next gateway tick — manual
+intervention is required. Two distinct failure modes account for
+nearly all of these:
+
+1. **`crashed` — exit code non-zero.** Typically: unknown skill,
+   missing profile resources, model credentials not configured.
+   Reads as `crashed` in `hermes kanban dispatch --dry-run --json`.
+2. **`protocol_violation` — exit code 0, no terminal tool call.**
+   The model produced a text-only final assistant turn (often
+   prose saying "I'm done" or summarizing the work) without ever
+   calling `complete` or `block`. The worker process exits cleanly,
+   Hermes records a `protocol_violation` event, and the task moves
+   to `gave_up` (`failures: 1, effective_limit: 1, limit_source:
+   dispatcher`) — **one strike, retired**. The kanban-worker skill
+   (`scientia-kanban-worker/SKILL.md`, "Headless execution
+   discipline") forbids this mode explicitly; recurrence usually
+   means the skill is not loaded in the worker profile or its
+   per-turn invariant is being overridden by a profile body.
 
 **Diagnostics.** Run `hermes kanban dispatch --dry-run --json` and
 look at the `skipped_nonspawnable` and `crashed` arrays. A
@@ -252,11 +267,39 @@ look at the `skipped_nonspawnable` and `crashed` arrays. A
 profile is unknown to Hermes — confirm with
 `hermes profile show <assignee>` (this also drives the
 profile-existence preflight gate). A `crashed` entry means the
-worker started but exited; read its stderr with
-`hermes kanban log <task-id>`. The most common cause seen in
+worker exited non-zero; read its stderr with
+`hermes kanban log <task-id>`. The most common stderr seen in
 practice is `Error: Unknown skill(s): scientia-kanban-worker,
 scientia-grill`, which means the profile-local skill symlinks are
 missing — re-run `scientia-kanban-init` step 4 to install them.
+
+A **`protocol_violation`** event will not appear in the `crashed`
+array (exit was clean). Confirm it by reading the task's event
+trail directly:
+
+```sql
+sqlite3 ~/.hermes/kanban.db \
+  "select event, payload, ts from events where task_id='<task-id>' \
+   order by ts desc limit 8;"
+```
+
+You'll see `gave_up | {"error": "worker exited cleanly (rc=0)
+without calling kanban_complete or kanban_block — protocol
+violation", ...}`. The worker session log will read `Messages: 1
+(1 user, 0 tool calls)` — silent-by-design. When this mode recurs:
+
+- Verify `scientia-kanban-worker` is actually loaded for the
+  assignee's profile: `hermes -p <assignee> skills list --source
+  local | grep scientia-kanban-worker`. If absent, re-run
+  `scientia-kanban-init` step 4.
+- Check the SKILL.md sha against the bundle's: a stale or
+  hand-edited copy may have lost the "every turn must contain at
+  least one tool call" invariant.
+- If both check out and the failure recurs across multiple tasks,
+  the model is the likely culprit — escalate via
+  `development/config.yaml`'s `hermes.profiles.<role>.model` (see
+  `scientia-kanban-init/references/profile-models.md`) and re-run
+  init to converge.
 
 **Recovery.** After fixing the underlying cause, re-promote the
 parked tasks and let the dispatcher try again:
