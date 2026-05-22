@@ -34,8 +34,11 @@ sys.path.insert(0, str(_EMIT_SCRIPTS))
 
 from profile_models import (  # noqa: E402
     ProfileConfigError,
+    collect_custom_provider_refs,
     flatten_profile,
+    propagate_custom_providers_to_profile,
     read_effective_profile_config,
+    read_host_custom_providers,
     resolve_profile_name,
     validate_profiles,
 )
@@ -109,12 +112,19 @@ def apply_all(
     config: dict,
     repo_root: Path,
     runner: Callable = subprocess.run,
+    profiles_root: Optional[Path] = None,
 ) -> Dict[str, dict]:
     """Apply hermes.profiles to every declared role. Returns a summary dict.
 
     Raises ProfileConfigError on schema violations; raises RuntimeError on
     the first `hermes config set` failure with the failing key + stderr.
     Roles that are absent from `hermes.profiles` are reported as `skipped`.
+
+    When a role's declared block references one or more `custom:<name>`
+    providers, the matching host-level `custom_providers` entries are
+    propagated into the profile's own `~/.hermes/profiles/<name>/config.yaml`.
+    Profiles are independent Hermes homes — without their own
+    `custom_providers:` block, workers crash with `Unknown provider 'custom:<name>'`.
     """
     hermes_cfg = config.get("hermes", {}) or {}
     profiles_block = hermes_cfg.get("profiles")
@@ -131,6 +141,15 @@ def apply_all(
         )
         return summary
 
+    # Lazy host-config read — only when any role references a custom provider.
+    host_providers_cache: Optional[List[dict]] = None
+
+    def _get_host_providers() -> List[dict]:
+        nonlocal host_providers_cache
+        if host_providers_cache is None:
+            host_providers_cache = read_host_custom_providers(runner=runner)
+        return host_providers_cache
+
     for role, block in declared_profiles.items():
         profile_name = resolve_profile_name(role, profile_names)
         if not block:
@@ -139,6 +158,7 @@ def apply_all(
                 "applied": 0,
                 "unchanged": 0,
                 "skipped": True,
+                "propagated_custom_providers": [],
             }
             continue
         declared = flatten_profile(block)
@@ -148,8 +168,39 @@ def apply_all(
                 "applied": 0,
                 "unchanged": 0,
                 "skipped": True,
+                "propagated_custom_providers": [],
             }
             continue
+
+        # 1) Propagate custom_providers BEFORE setting model leaves —
+        # otherwise `hermes -p <name> config show --json` may fail to resolve
+        # the provider when reading the profile's effective config.
+        needed = collect_custom_provider_refs(block)
+        propagated: List[str] = []
+        already_present: List[str] = []
+        if needed:
+            propagated, already_present = propagate_custom_providers_to_profile(
+                profile_name=profile_name,
+                needed_names=needed,
+                host_providers=_get_host_providers(),
+                profiles_root=profiles_root,
+            )
+            if propagated:
+                _append_log(
+                    repo_root,
+                    f"- {_iso_now()} — scientia-kanban-init — "
+                    f"custom-providers-propagated — — profile={role}({profile_name}) "
+                    f"providers={','.join(propagated)}",
+                )
+            if already_present:
+                _append_log(
+                    repo_root,
+                    f"- {_iso_now()} — scientia-kanban-init — "
+                    f"custom-providers-already-present — — profile={role}({profile_name}) "
+                    f"providers={','.join(already_present)}",
+                )
+
+        # 2) Apply the declared scalar leaves.
         applied, unchanged, errors = apply_one_profile(
             role=role,
             profile_name=profile_name,
@@ -161,6 +212,7 @@ def apply_all(
             "applied": applied,
             "unchanged": unchanged,
             "skipped": False,
+            "propagated_custom_providers": propagated,
         }
         _append_log(
             repo_root,

@@ -558,5 +558,373 @@ class CheckProfilesExistTests(unittest.TestCase):
         )
 
 
+# ---------------------------------------------------------------------------
+# collect_custom_provider_refs
+# ---------------------------------------------------------------------------
+
+
+class CollectCustomProviderRefsTests(unittest.TestCase):
+    def test_empty_block_returns_empty(self):
+        self.assertEqual(pm.collect_custom_provider_refs({}), set())
+
+    def test_non_dict_returns_empty(self):
+        self.assertEqual(pm.collect_custom_provider_refs(None), set())  # type: ignore[arg-type]
+        self.assertEqual(pm.collect_custom_provider_refs("x"), set())  # type: ignore[arg-type]
+
+    def test_picks_up_model_provider(self):
+        block = {"model": {"provider": "custom:fireworks", "default": "x"}}
+        self.assertEqual(
+            pm.collect_custom_provider_refs(block), {"fireworks"}
+        )
+
+    def test_builtin_provider_ignored(self):
+        block = {"model": {"provider": "anthropic", "default": "x"}}
+        self.assertEqual(pm.collect_custom_provider_refs(block), set())
+
+    def test_bare_custom_no_name_ignored(self):
+        # `provider: custom` (no colon-suffix) resolves against the profile's
+        # inline base_url/api_mode — no host lookup needed.
+        block = {"model": {"provider": "custom", "default": "x"}}
+        self.assertEqual(pm.collect_custom_provider_refs(block), set())
+
+    def test_picks_up_from_auxiliary_blocks(self):
+        block = {
+            "model": {"provider": "anthropic"},
+            "auxiliary": {
+                "compression": {"provider": "custom:firepass"},
+                "vision":      {"provider": "openrouter"},
+                "session_titles": {"provider": "custom:fireworks"},
+            },
+        }
+        self.assertEqual(
+            pm.collect_custom_provider_refs(block),
+            {"firepass", "fireworks"},
+        )
+
+    def test_picks_up_from_model_aliases(self):
+        block = {
+            "model_aliases": {
+                "fav": {"model": "x", "provider": "custom:together"},
+            },
+        }
+        self.assertEqual(
+            pm.collect_custom_provider_refs(block), {"together"}
+        )
+
+    def test_dedupes_across_sources(self):
+        block = {
+            "model": {"provider": "custom:fireworks"},
+            "auxiliary": {
+                "compression": {"provider": "custom:fireworks"},
+            },
+            "model_aliases": {
+                "alt": {"model": "y", "provider": "custom:fireworks"},
+            },
+        }
+        self.assertEqual(
+            pm.collect_custom_provider_refs(block), {"fireworks"}
+        )
+
+    def test_strips_whitespace(self):
+        block = {"model": {"provider": "custom:  fireworks  "}}
+        self.assertEqual(
+            pm.collect_custom_provider_refs(block), {"fireworks"}
+        )
+
+    def test_empty_suffix_ignored(self):
+        # `custom:` with no name shouldn't add an empty string.
+        block = {"model": {"provider": "custom:"}}
+        self.assertEqual(pm.collect_custom_provider_refs(block), set())
+
+
+# ---------------------------------------------------------------------------
+# read_host_custom_providers
+# ---------------------------------------------------------------------------
+
+
+class ReadHostCustomProvidersTests(unittest.TestCase):
+    def _runner(self, returncode=0, stdout="{}", stderr=""):
+        def _r(argv, **kw):
+            _r.calls.append(list(argv))
+            return SimpleNamespace(
+                returncode=returncode, stdout=stdout, stderr=stderr,
+            )
+        _r.calls = []
+        return _r
+
+    def test_returns_empty_when_no_block(self):
+        runner = self._runner(stdout=json.dumps({"model": {}}))
+        self.assertEqual(pm.read_host_custom_providers(runner=runner), [])
+        self.assertIn("config", runner.calls[0])
+        self.assertIn("show", runner.calls[0])
+        self.assertIn("--json", runner.calls[0])
+        # Host call — no `-p` flag.
+        self.assertNotIn("-p", runner.calls[0])
+
+    def test_returns_list_when_present(self):
+        providers = [
+            {"name": "fireworks", "base_url": "https://api.fireworks.ai/inference/v1"},
+            {"name": "firepass", "base_url": "https://api.fireworks.ai/inference/v1"},
+        ]
+        runner = self._runner(
+            stdout=json.dumps({"custom_providers": providers}),
+        )
+        self.assertEqual(
+            pm.read_host_custom_providers(runner=runner), providers
+        )
+
+    def test_raises_on_non_zero_exit(self):
+        runner = self._runner(returncode=2, stderr="boom")
+        with self.assertRaises(RuntimeError) as ctx:
+            pm.read_host_custom_providers(runner=runner)
+        self.assertIn("boom", str(ctx.exception))
+
+    def test_raises_on_bad_json(self):
+        runner = self._runner(stdout="not json")
+        with self.assertRaises(RuntimeError) as ctx:
+            pm.read_host_custom_providers(runner=runner)
+        self.assertIn("invalid JSON", str(ctx.exception))
+
+    def test_raises_when_custom_providers_not_a_list(self):
+        runner = self._runner(
+            stdout=json.dumps({"custom_providers": "wrong type"}),
+        )
+        with self.assertRaises(RuntimeError) as ctx:
+            pm.read_host_custom_providers(runner=runner)
+        self.assertIn("not a list", str(ctx.exception))
+
+
+# ---------------------------------------------------------------------------
+# YAML emitter (covered indirectly via propagate_*, but a few direct asserts
+# guard the round-trip shape)
+# ---------------------------------------------------------------------------
+
+
+class YamlEmitterTests(unittest.TestCase):
+    def test_emit_scalar_primitives(self):
+        self.assertEqual(pm._emit_scalar("plain"), "plain")
+        self.assertEqual(pm._emit_scalar(""), "''")
+        self.assertEqual(pm._emit_scalar(None), "null")
+        self.assertEqual(pm._emit_scalar(True), "true")
+        self.assertEqual(pm._emit_scalar(False), "false")
+        self.assertEqual(pm._emit_scalar(131072), "131072")
+
+    def test_emit_scalar_quotes_when_needed(self):
+        # YAML-sensitive characters force quoting.
+        self.assertEqual(pm._emit_scalar("a: b"), "'a: b'")
+        self.assertEqual(pm._emit_scalar("yes"), "'yes'")
+        self.assertEqual(pm._emit_scalar("no"), "'no'")
+        # Embedded single quotes are doubled inside a single-quoted scalar.
+        # Input "'inner'" (7 chars) -> "'''inner'''" (11 chars).
+        self.assertEqual(pm._emit_scalar("'inner'"), "'''inner'''")
+        # Numeric-looking strings get quoted to preserve the string type.
+        self.assertEqual(pm._emit_scalar("42"), "'42'")
+        # Trailing colon would be parsed as a key indicator.
+        self.assertEqual(pm._emit_scalar("trailing:"), "'trailing:'")
+
+    def test_emit_scalar_leaves_paths_and_urls_unquoted(self):
+        self.assertEqual(
+            pm._emit_scalar("https://api.fireworks.ai/inference/v1"),
+            "https://api.fireworks.ai/inference/v1",
+        )
+        self.assertEqual(
+            pm._emit_scalar("accounts/fireworks/models/glm-5p1"),
+            "accounts/fireworks/models/glm-5p1",
+        )
+
+    def test_emit_list_of_simple_mappings(self):
+        items = [
+            {"name": "fireworks", "key_env": "FIREWORKS_API_KEY"},
+        ]
+        lines = pm._emit_list(items, indent=0)
+        self.assertEqual(lines, [
+            "- name: fireworks",
+            "  key_env: FIREWORKS_API_KEY",
+        ])
+
+    def test_emit_list_with_nested_mapping(self):
+        items = [
+            {
+                "name": "fireworks",
+                "models": {
+                    "accounts/fireworks/models/glm-5p1": {"context_length": 131072},
+                },
+            },
+        ]
+        lines = pm._emit_list(items, indent=0)
+        self.assertEqual(lines, [
+            "- name: fireworks",
+            "  models:",
+            "    accounts/fireworks/models/glm-5p1:",
+            "      context_length: 131072",
+        ])
+
+
+# ---------------------------------------------------------------------------
+# propagate_custom_providers_to_profile
+# ---------------------------------------------------------------------------
+
+
+import tempfile  # noqa: E402
+from pathlib import Path  # noqa: E402
+
+
+class PropagateCustomProvidersTests(unittest.TestCase):
+    def _mk_profile(self, root: Path, name: str, body: str = "") -> Path:
+        d = root / name
+        d.mkdir(parents=True, exist_ok=True)
+        cfg = d / "config.yaml"
+        cfg.write_text(body, encoding="utf-8")
+        return cfg
+
+    def _host_providers(self):
+        return [
+            {
+                "name": "fireworks",
+                "base_url": "https://api.fireworks.ai/inference/v1",
+                "key_env": "FIREWORKS_API_KEY",
+                "api_mode": "chat_completions",
+                "models": {
+                    "accounts/fireworks/models/glm-5p1": {"context_length": 131072},
+                    "accounts/fireworks/models/kimi-k2p6": {"context_length": 131072},
+                },
+            },
+            {
+                "name": "firepass",
+                "base_url": "https://api.fireworks.ai/inference/v1",
+                "key_env": "FIREWORKS_FIREPASS_API_KEY",
+                "models": {
+                    "accounts/fireworks/routers/kimi-k2p6-turbo": {"context_length": 131072},
+                },
+            },
+        ]
+
+    def test_no_op_when_needed_set_empty(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            self._mk_profile(root, "scientia-implementer")
+            added, already = pm.propagate_custom_providers_to_profile(
+                profile_name="scientia-implementer",
+                needed_names=set(),
+                host_providers=self._host_providers(),
+                profiles_root=root,
+            )
+            self.assertEqual(added, [])
+            self.assertEqual(already, [])
+
+    def test_appends_block_when_missing(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            cfg = self._mk_profile(
+                root, "scientia-implementer",
+                body="onboarding:\n  seen:\n    tool_progress_prompt: true\n",
+            )
+            added, already = pm.propagate_custom_providers_to_profile(
+                profile_name="scientia-implementer",
+                needed_names={"fireworks"},
+                host_providers=self._host_providers(),
+                profiles_root=root,
+            )
+            self.assertEqual(added, ["fireworks"])
+            self.assertEqual(already, [])
+            text = cfg.read_text(encoding="utf-8")
+            # Original content preserved.
+            self.assertIn("onboarding:", text)
+            self.assertIn("tool_progress_prompt: true", text)
+            # New block appended.
+            self.assertIn("custom_providers:", text)
+            self.assertIn("- name: fireworks", text)
+            self.assertIn("key_env: FIREWORKS_API_KEY", text)
+            self.assertIn("base_url: https://api.fireworks.ai/inference/v1", text)
+            # Models nested correctly.
+            self.assertIn("accounts/fireworks/models/glm-5p1:", text)
+            self.assertIn("context_length: 131072", text)
+            # firepass NOT propagated (wasn't requested).
+            self.assertNotIn("FIREWORKS_FIREPASS_API_KEY", text)
+
+    def test_replaces_empty_mapping_file(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            cfg = self._mk_profile(root, "scientia-aggregator", body="{}\n")
+            added, already = pm.propagate_custom_providers_to_profile(
+                profile_name="scientia-aggregator",
+                needed_names={"fireworks"},
+                host_providers=self._host_providers(),
+                profiles_root=root,
+            )
+            self.assertEqual(added, ["fireworks"])
+            text = cfg.read_text(encoding="utf-8")
+            # The `{}` placeholder is gone.
+            self.assertFalse(text.lstrip().startswith("{}"))
+            self.assertTrue(text.startswith("custom_providers:"))
+
+    def test_creates_missing_profile_dir(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            added, _ = pm.propagate_custom_providers_to_profile(
+                profile_name="scientia-reviewer",
+                needed_names={"fireworks"},
+                host_providers=self._host_providers(),
+                profiles_root=root,
+            )
+            self.assertEqual(added, ["fireworks"])
+            cfg = root / "scientia-reviewer" / "config.yaml"
+            self.assertTrue(cfg.is_file())
+            self.assertIn("custom_providers:", cfg.read_text())
+
+    def test_idempotent_when_block_already_present(self):
+        existing = (
+            "model:\n"
+            "  provider: custom:fireworks\n"
+            "custom_providers:\n"
+            "- name: fireworks\n"
+            "  base_url: https://example.com/v1\n"
+        )
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            cfg = self._mk_profile(root, "scientia-implementer", body=existing)
+            added, already = pm.propagate_custom_providers_to_profile(
+                profile_name="scientia-implementer",
+                needed_names={"fireworks"},
+                host_providers=self._host_providers(),
+                profiles_root=root,
+            )
+            self.assertEqual(added, [])
+            self.assertEqual(already, ["fireworks"])
+            # File untouched.
+            self.assertEqual(cfg.read_text(encoding="utf-8"), existing)
+
+    def test_propagates_multiple_providers_sorted(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            cfg = self._mk_profile(root, "scientia-implementer", body="")
+            added, already = pm.propagate_custom_providers_to_profile(
+                profile_name="scientia-implementer",
+                needed_names={"fireworks", "firepass"},
+                host_providers=self._host_providers(),
+                profiles_root=root,
+            )
+            # Sorted order — firepass before fireworks.
+            self.assertEqual(added, ["firepass", "fireworks"])
+            text = cfg.read_text(encoding="utf-8")
+            firepass_idx = text.index("- name: firepass")
+            fireworks_idx = text.index("- name: fireworks")
+            self.assertLess(firepass_idx, fireworks_idx)
+
+    def test_raises_when_host_missing_a_referenced_provider(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            self._mk_profile(root, "scientia-implementer")
+            with self.assertRaises(RuntimeError) as ctx:
+                pm.propagate_custom_providers_to_profile(
+                    profile_name="scientia-implementer",
+                    needed_names={"unknown-provider"},
+                    host_providers=self._host_providers(),
+                    profiles_root=root,
+                )
+            self.assertIn("unknown-provider", str(ctx.exception))
+            self.assertIn("not in host config", str(ctx.exception))
+
+
 if __name__ == "__main__":
     unittest.main()

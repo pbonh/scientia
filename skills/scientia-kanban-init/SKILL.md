@@ -69,6 +69,29 @@ Make this host ready to run the scientia kanban phase.
    `model-config-skipped — reason=hermes.profiles-absent` to
    `development/log.md` and skip to step 4.
 
+   **`custom:<name>` propagation.** Per Hermes' documented profile
+   isolation, profile configs do not inherit `custom_providers:` from
+   `~/.hermes/config.yaml`. Before applying scalar leaves, the script
+   scans each role's declared block for `custom:<name>` references
+   (under `model.provider`, `auxiliary.<task>.provider`, or
+   `model_aliases.<alias>.provider`) and, for each name found, copies
+   the matching host `custom_providers` entry into the profile's own
+   `~/.hermes/profiles/<name>/config.yaml`. Idempotent: a profile
+   whose config already contains `custom_providers:` is left alone
+   (treated as user-managed) and logged as
+   `custom-providers-already-present`. Successful propagation is
+   logged as:
+
+   ```
+   - <ISO-Z> — scientia-kanban-init — custom-providers-propagated — — profile=<role>(<resolved-name>) providers=<csv>
+   ```
+
+   Per-profile `.env` files are *not* touched — the API key that backs
+   each custom provider is your domain (set it in
+   `~/.hermes/profiles/<name>/.env`, `~/.hermes/.env`, or your shell
+   environment). Built-in providers (`anthropic`, `openrouter`, etc.)
+   need no propagation and resolve directly in profile context.
+
    If present, for each declared role:
 
    ```bash

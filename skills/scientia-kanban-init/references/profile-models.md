@@ -11,6 +11,59 @@ This page documents what scientia accepts. For the meaning of any
 individual key — what `compression` does, what `provider: auto` resolves
 to, which providers are supported — consult Hermes' docs.
 
+## How `custom:<name>` resolves under profile isolation
+
+Per the
+[Hermes profile docs](https://hermes-agent.nousresearch.com/docs/user-guide/profiles),
+each profile is *a separate Hermes home directory* with its own
+`config.yaml`. There is no inheritance from `~/.hermes/config.yaml` to
+`~/.hermes/profiles/<name>/config.yaml` — so `custom_providers:`
+declared at the host level is invisible to profile workers. A profile
+whose config says only `model.provider: custom:fireworks` (with no
+`custom_providers:` block of its own) will crash on first model call
+with:
+
+```
+Unknown provider 'custom:<name>'. Check 'hermes model' for available
+providers, or run 'hermes doctor' to diagnose config issues.
+```
+
+The failure reproduces on every spawn path — gateway-dispatched workers
+and direct `hermes -p <name> -z "..."` oneshot invocations alike.
+
+**Scientia handles this for you.** When `scientia-kanban-init` walks
+`hermes.profiles`, for every role whose declared block references a
+`custom:<name>` provider (under `model.provider`,
+`auxiliary.<task>.provider`, or `model_aliases.<alias>.provider`), it:
+
+1. Reads the host config via `hermes config show --json` and finds the
+   matching entry in `custom_providers`.
+2. Appends a `custom_providers:` block to that profile's own
+   `~/.hermes/profiles/<name>/config.yaml` containing only the
+   referenced entries.
+3. Then applies the role's `model.*` (and other) leaves via
+   `hermes -p <name> config set`.
+
+Re-running `scientia-kanban-init` is idempotent: if `custom_providers:`
+is already present in the profile config (whether scientia wrote it or
+you hand-edited it), the propagation step leaves the file alone and
+logs `custom-providers-already-present`.
+
+**What scientia does NOT touch.** Per-profile `.env` files. The API key
+that backs each custom provider (`FIREWORKS_API_KEY`, etc.) is your
+domain — set it in `~/.hermes/profiles/<name>/.env`, in
+`~/.hermes/.env`, or in your shell environment. Scientia never writes
+secrets.
+
+**Built-in providers** (`anthropic`, `openrouter`, `xai`, etc.) need no
+propagation; they're recognized by Hermes' provider registry in every
+profile context. Use them directly when no custom endpoint is required.
+
+**`provider: custom` with an inline `base_url`/`api_mode`** (bare
+`custom`, no colon-suffix) is also a valid pattern — it doesn't
+reference any host entry, so nothing is propagated. The profile config
+is self-contained.
+
 ## Where the block lives
 
 `development/config.yaml`:

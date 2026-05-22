@@ -245,5 +245,182 @@ class ApplyAllTests(unittest.TestCase):
                 )
 
 
+# ---------------------------------------------------------------------------
+# Custom-provider propagation integration
+# ---------------------------------------------------------------------------
+
+
+def _make_runner_with_host(
+    *,
+    effective: dict,
+    host_custom_providers: list,
+    set_failures: list | None = None,
+):
+    """Fake runner that also responds to host-level `hermes config show --json`.
+
+    - `hermes config show --json` (no -p)           → host config JSON.
+    - `hermes -p NAME config show --json`           → JSON of `effective`.
+    - `hermes -p NAME config set KEY VAL`           → success unless KEY in
+                                                      `set_failures`.
+    """
+    set_failures = set_failures or []
+
+    def runner(argv, **kw):
+        runner.calls.append(list(argv))
+        has_profile_flag = "-p" in argv
+        is_show = "show" in argv and "--json" in argv
+        if is_show and not has_profile_flag:
+            return SimpleNamespace(
+                returncode=0,
+                stdout=json.dumps({"custom_providers": host_custom_providers}),
+                stderr="",
+            )
+        if is_show:
+            return SimpleNamespace(
+                returncode=0, stdout=json.dumps(effective), stderr="",
+            )
+        if "set" in argv:
+            try:
+                key = argv[argv.index("set") + 1]
+            except (ValueError, IndexError):
+                return SimpleNamespace(returncode=2, stdout="",
+                                       stderr="malformed set call")
+            if key in set_failures:
+                return SimpleNamespace(
+                    returncode=1, stdout="",
+                    stderr=f"hermes rejected {key}",
+                )
+            return SimpleNamespace(returncode=0, stdout="", stderr="")
+        return SimpleNamespace(returncode=0, stdout="", stderr="")
+
+    runner.calls = []
+    return runner
+
+
+class ApplyAllCustomProviderPropagationTests(unittest.TestCase):
+    HOST_PROVIDERS = [
+        {
+            "name": "fireworks",
+            "base_url": "https://api.fireworks.ai/inference/v1",
+            "key_env": "FIREWORKS_API_KEY",
+            "api_mode": "chat_completions",
+            "models": {
+                "accounts/fireworks/models/glm-5p1": {"context_length": 131072},
+                "accounts/fireworks/models/kimi-k2p6": {"context_length": 131072},
+            },
+        },
+        {
+            "name": "firepass",
+            "base_url": "https://api.fireworks.ai/inference/v1",
+            "key_env": "FIREWORKS_FIREPASS_API_KEY",
+        },
+    ]
+
+    def test_propagates_when_role_references_custom_provider(self):
+        runner = _make_runner_with_host(
+            effective={},
+            host_custom_providers=self.HOST_PROVIDERS,
+        )
+        config = {
+            "hermes": {
+                "profiles": {
+                    "implementer": {
+                        "model": {
+                            "provider": "custom:fireworks",
+                            "default": "accounts/fireworks/models/glm-5p1",
+                        },
+                    },
+                },
+            },
+        }
+        with TemporaryDirectory() as td:
+            td_path = Path(td)
+            profiles_root = td_path / "profiles"
+            summary = apm.apply_all(
+                config=config,
+                repo_root=td_path,
+                runner=runner,
+                profiles_root=profiles_root,
+            )
+
+            # The propagation block lands in the profile config.yaml.
+            cfg = profiles_root / "scientia-implementer" / "config.yaml"
+            self.assertTrue(cfg.is_file())
+            text = cfg.read_text(encoding="utf-8")
+            self.assertIn("custom_providers:", text)
+            self.assertIn("- name: fireworks", text)
+            self.assertIn("key_env: FIREWORKS_API_KEY", text)
+            self.assertIn("base_url: https://api.fireworks.ai/inference/v1", text)
+            self.assertIn("api_mode: chat_completions", text)
+            self.assertIn("context_length: 131072", text)
+            # firepass NOT propagated — it wasn't referenced.
+            self.assertNotIn("FIREWORKS_FIREPASS_API_KEY", text)
+
+            # Summary records what was propagated.
+            self.assertEqual(
+                summary["implementer"]["propagated_custom_providers"],
+                ["fireworks"],
+            )
+
+            # Log line for the propagation.
+            log_text = (td_path / "development" / "log.md").read_text()
+            self.assertIn("custom-providers-propagated", log_text)
+            self.assertIn("providers=fireworks", log_text)
+
+    def test_skips_host_lookup_when_no_custom_refs(self):
+        # No custom: references → no host config read.
+        runner = _make_runner_with_host(
+            effective={},
+            host_custom_providers=self.HOST_PROVIDERS,
+        )
+        config = {
+            "hermes": {
+                "profiles": {
+                    "implementer": {
+                        "model": {"provider": "anthropic", "default": "claude-opus-4.7"},
+                    },
+                },
+            },
+        }
+        with TemporaryDirectory() as td:
+            apm.apply_all(
+                config=config,
+                repo_root=Path(td),
+                runner=runner,
+                profiles_root=Path(td) / "profiles",
+            )
+        # No host config show (no -p, with show+--json) calls.
+        host_calls = [
+            c for c in runner.calls
+            if "show" in c and "--json" in c and "-p" not in c
+        ]
+        self.assertEqual(host_calls, [])
+
+    def test_raises_when_referenced_provider_missing_from_host(self):
+        runner = _make_runner_with_host(
+            effective={},
+            host_custom_providers=[],  # host has none
+        )
+        config = {
+            "hermes": {
+                "profiles": {
+                    "implementer": {
+                        "model": {"provider": "custom:fireworks"},
+                    },
+                },
+            },
+        }
+        with TemporaryDirectory() as td:
+            with self.assertRaises(RuntimeError) as ctx:
+                apm.apply_all(
+                    config=config,
+                    repo_root=Path(td),
+                    runner=runner,
+                    profiles_root=Path(td) / "profiles",
+                )
+            self.assertIn("fireworks", str(ctx.exception))
+            self.assertIn("not in host config", str(ctx.exception))
+
+
 if __name__ == "__main__":
     unittest.main()

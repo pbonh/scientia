@@ -126,6 +126,20 @@ hermes:
     # integrator omitted -> inherits Hermes host defaults
 ```
 
+**Custom providers and profile isolation.** Hermes profiles are
+independent home directories — a profile's `config.yaml` does **not**
+inherit `custom_providers:` from the host `~/.hermes/config.yaml`. A
+worker spawned against a profile that says `model.provider: custom:fireworks`
+but has no `custom_providers:` block of its own crashes with
+`Unknown provider 'custom:fireworks'`. `scientia-kanban-init` handles
+this automatically: when a role's declared block references any
+`custom:<name>` provider, the matching host entry is propagated into
+the profile's own `config.yaml` before the model leaves are applied.
+You manage the host `custom_providers:` definitions and per-profile
+`.env` files (for API keys); scientia takes care of the propagation.
+Built-in providers (`anthropic`, `openrouter`, `xai`, etc.) need no
+propagation and can be declared per-profile as-is.
+
 ## Versioning
 
 Each repo records `scientia_schema_version` in `development/config.yaml`;

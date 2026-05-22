@@ -36,50 +36,47 @@ hermes:
   # work as-is. Schema reference:
   #   skills/scientia-kanban-init/references/profile-models.md
   #
+  # Profile isolation: Hermes profiles are independent home directories
+  # and do not inherit `custom_providers:` from `~/.hermes/config.yaml`.
+  # When a role below references `custom:<name>`, scientia-kanban-init
+  # copies the matching host `custom_providers` entry into the profile's
+  # own config.yaml before applying these leaves. The host-level
+  # `custom_providers:` definitions and the per-profile `.env` files
+  # (for `FIREWORKS_API_KEY` etc.) remain your responsibility; scientia
+  # never writes secrets.
+  #
   # Defaults below route every profile through the Fireworks OpenAI-
-  # compatible endpoint, with a model chosen for the role's workload.
-  # Hermes has no built-in `fireworks` provider, so the pattern is
-  # `base_url` + an OpenAI-compatible `api_mode` — Hermes calls the
-  # endpoint directly and ignores `provider`. You must provide
-  # `FIREWORKS_API_KEY` (or `OPENAI_API_KEY`) in
-  # `~/.hermes/profiles/<name>/.env` — scientia does not manage secrets.
-  # To opt out and inherit Hermes' host-level defaults, comment out the
-  # `profiles:` block entirely.
+  # compatible endpoint named "fireworks" in `~/.hermes/config.yaml`,
+  # with a model chosen for the role's workload. To opt out and inherit
+  # the Hermes host-level default model, comment out the `profiles:`
+  # block entirely or set it to `{}`.
   profiles:
     # Smartest model — writes code and tests against the Gherkin scenario.
     implementer:
       model:
-        provider: custom
+        provider: custom:fireworks
         default: accounts/fireworks/models/glm-5p1
-        base_url: https://api.fireworks.ai/inference/v1
-        api_mode: chat_completions
 
     # Largest context — reads the full diff, the implementer's branch,
     # plus every ADR cited by the scenario in one pass.
     reviewer:
       model:
-        provider: custom
+        provider: custom:fireworks
         default: accounts/fireworks/models/deepseek-v4-pro
-        base_url: https://api.fireworks.ai/inference/v1
-        api_mode: chat_completions
 
     # Good all-around — merge preflights, rebase, post comment. No
     # heavy reasoning; favors throughput.
     integrator:
       model:
-        provider: custom
+        provider: custom:fireworks
         default: accounts/fireworks/models/kimi-k2p6
-        base_url: https://api.fireworks.ai/inference/v1
-        api_mode: chat_completions
 
     # Good all-around — synthesizes finished child handoffs into the
     # spec's Implementation Evidence section.
     aggregator:
       model:
-        provider: custom
+        provider: custom:fireworks
         default: accounts/fireworks/models/qwen3p6-plus
-        base_url: https://api.fireworks.ai/inference/v1
-        api_mode: chat_completions
 
 # Emit policy.
 emit:

@@ -16,7 +16,7 @@ from __future__ import annotations
 import json
 import subprocess
 from pathlib import Path
-from typing import Callable, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, Iterable, List, Optional, Set, Tuple
 
 
 # Logical scientia roles. Keys allowed under `hermes.profiles:` in
@@ -426,3 +426,290 @@ def check_profiles_exist(
         + bullets
         + "\nFix: run `scientia-kanban-init` to create them."
     )
+
+
+# ---------------------------------------------------------------------------
+# Custom-provider propagation
+#
+# Hermes profiles are independent home directories: a profile's
+# `~/.hermes/profiles/<name>/config.yaml` does NOT inherit `custom_providers`
+# from `~/.hermes/config.yaml`. A worker spawned against a profile that says
+# `model.provider: custom:fireworks` but has no `custom_providers:` block of
+# its own crashes with `Unknown provider 'custom:fireworks'`. The fix is to
+# write the matching host entry into the profile config — these helpers walk
+# a declared `hermes.profiles.<role>` block to find which custom providers
+# the role references, read them from the host config via
+# `hermes config show --json`, and append the entries to the profile's
+# config.yaml.
+# ---------------------------------------------------------------------------
+
+
+def _provider_refs_in(value: Any) -> Iterable[str]:
+    """Yield the custom-provider names referenced under a `provider:` key."""
+    if isinstance(value, str) and value.startswith("custom:"):
+        name = value.split(":", 1)[1].strip()
+        if name:
+            yield name
+
+
+def collect_custom_provider_refs(role_block: dict) -> Set[str]:
+    """Return the set of named custom providers referenced by a role's block.
+
+    Walks `model.provider`, every `auxiliary.<task>.provider`, and every
+    `model_aliases.<alias>.provider`; collects names from values shaped
+    `custom:<name>`. Bare `provider: custom` (no name) is ignored — it's
+    resolved against the profile's own inline `base_url`/`api_mode` and
+    doesn't need a host lookup.
+    """
+    refs: Set[str] = set()
+    if not isinstance(role_block, dict):
+        return refs
+    model = role_block.get("model") or {}
+    if isinstance(model, dict):
+        refs.update(_provider_refs_in(model.get("provider")))
+    aux = role_block.get("auxiliary") or {}
+    if isinstance(aux, dict):
+        for task_cfg in aux.values():
+            if isinstance(task_cfg, dict):
+                refs.update(_provider_refs_in(task_cfg.get("provider")))
+    aliases = role_block.get("model_aliases") or {}
+    if isinstance(aliases, dict):
+        for alias_cfg in aliases.values():
+            if isinstance(alias_cfg, dict):
+                refs.update(_provider_refs_in(alias_cfg.get("provider")))
+    return refs
+
+
+def read_host_custom_providers(
+    *, runner: Callable = subprocess.run,
+) -> List[dict]:
+    """Read the host-level `custom_providers` list via `hermes config show --json`.
+
+    Returns the list as parsed from JSON (each entry is a dict with at least
+    `name`, `base_url`; usually also `key_env`, `api_mode`, and `models`).
+    Returns [] when the host config has no `custom_providers`.
+    """
+    proc = runner(
+        ["hermes", "config", "show", "--json"],
+        capture_output=True,
+        text=True,
+    )
+    if proc.returncode != 0:
+        raise RuntimeError(
+            "`hermes config show --json` failed: "
+            f"{proc.stderr.strip() or 'no stderr'}"
+        )
+    try:
+        data = json.loads(proc.stdout)
+    except json.JSONDecodeError as e:
+        raise RuntimeError(
+            f"`hermes config show --json` returned invalid JSON: {e}"
+        )
+    if not isinstance(data, dict):
+        raise RuntimeError(
+            "`hermes config show --json` returned a non-object top-level value"
+        )
+    providers = data.get("custom_providers") or []
+    if not isinstance(providers, list):
+        raise RuntimeError(
+            "host config `custom_providers` is not a list "
+            f"(got {type(providers).__name__})"
+        )
+    return providers
+
+
+# ---------------------------------------------------------------------------
+# Tiny YAML emitter — handles nested mappings, lists of mappings, scalars.
+# Stdlib only; covers the shape needed for a `custom_providers:` block.
+# ---------------------------------------------------------------------------
+
+
+# Reserved literal scalars that must be quoted to preserve their string type
+# (otherwise YAML would interpret them as booleans, null, etc.).
+_YAML_RESERVED_LITERALS = frozenset({
+    "true", "false", "yes", "no", "on", "off", "null", "~",
+    "Y", "N",
+})
+
+# First-character set that triggers YAML's flow-indicator / special-token
+# parsing. A scalar starting with any of these must be quoted.
+_YAML_LEADING_SPECIALS = set("*&!|>%@`,[]{}#?\"'")
+
+
+def _scalar_needs_quoting(s: str) -> bool:
+    if s == "":
+        return True
+    if s != s.strip():
+        return True  # leading/trailing whitespace
+    if s in _YAML_RESERVED_LITERALS or s.lower() in _YAML_RESERVED_LITERALS:
+        return True
+    # Looks like a number (would be parsed as int/float).
+    try:
+        int(s); return True
+    except ValueError:
+        pass
+    try:
+        float(s); return True
+    except ValueError:
+        pass
+    if s[0] in _YAML_LEADING_SPECIALS:
+        return True
+    # Block-style sentinels at the start (followed by a space).
+    if s.startswith("- ") or s.startswith(": ") or s.startswith("? "):
+        return True
+    # Trailing colon would be parsed as a key indicator.
+    if s.endswith(":"):
+        return True
+    # Colon followed by space is the key/value separator — must quote.
+    if ": " in s:
+        return True
+    # `#` preceded by whitespace begins a comment — must quote.
+    if " #" in s:
+        return True
+    return False
+
+
+def _emit_scalar(value: Any) -> str:
+    if value is None:
+        return "null"
+    if value is True:
+        return "true"
+    if value is False:
+        return "false"
+    if isinstance(value, (int, float)):
+        return str(value)
+    s = str(value)
+    if _scalar_needs_quoting(s):
+        return "'" + s.replace("'", "''") + "'"
+    return s
+
+
+def _emit_mapping(mapping: dict, indent: int) -> List[str]:
+    """Emit a mapping as YAML lines. `indent` is the depth (in 2-space units)."""
+    lines: List[str] = []
+    pad = "  " * indent
+    for key, value in mapping.items():
+        if isinstance(value, dict):
+            if not value:
+                lines.append(f"{pad}{key}: {{}}")
+            else:
+                lines.append(f"{pad}{key}:")
+                lines.extend(_emit_mapping(value, indent + 1))
+        elif isinstance(value, list):
+            if not value:
+                lines.append(f"{pad}{key}: []")
+            else:
+                lines.append(f"{pad}{key}:")
+                lines.extend(_emit_list(value, indent))
+        else:
+            lines.append(f"{pad}{key}: {_emit_scalar(value)}")
+    return lines
+
+
+def _emit_list(items: list, indent: int) -> List[str]:
+    """Emit a list as block-style YAML. Dashes sit at `indent`."""
+    lines: List[str] = []
+    pad = "  " * indent
+    cont = pad + "  "  # continuation indent inside an item
+    for item in items:
+        if isinstance(item, dict):
+            if not item:
+                lines.append(f"{pad}- {{}}")
+                continue
+            keys = list(item.keys())
+            for i, key in enumerate(keys):
+                value = item[key]
+                prefix = f"{pad}- " if i == 0 else cont
+                if isinstance(value, dict):
+                    if not value:
+                        lines.append(f"{prefix}{key}: {{}}")
+                    else:
+                        lines.append(f"{prefix}{key}:")
+                        lines.extend(_emit_mapping(value, indent + 2))
+                elif isinstance(value, list):
+                    if not value:
+                        lines.append(f"{prefix}{key}: []")
+                    else:
+                        lines.append(f"{prefix}{key}:")
+                        lines.extend(_emit_list(value, indent + 1))
+                else:
+                    lines.append(f"{prefix}{key}: {_emit_scalar(value)}")
+        else:
+            lines.append(f"{pad}- {_emit_scalar(item)}")
+    return lines
+
+
+# ---------------------------------------------------------------------------
+# Profile config file mutation
+# ---------------------------------------------------------------------------
+
+
+def profile_config_path(
+    profile_name: str,
+    *,
+    profiles_root: Optional[Path] = None,
+) -> Path:
+    """Return the path to a profile's `config.yaml`.
+
+    Defaults to `~/.hermes/profiles/<name>/config.yaml`. Pass
+    `profiles_root` for tests.
+    """
+    root = profiles_root or (Path.home() / ".hermes" / "profiles")
+    return root / profile_name / "config.yaml"
+
+
+def propagate_custom_providers_to_profile(
+    *,
+    profile_name: str,
+    needed_names: Set[str],
+    host_providers: List[dict],
+    profiles_root: Optional[Path] = None,
+) -> Tuple[List[str], List[str]]:
+    """Ensure the named custom providers exist in the profile's config.yaml.
+
+    Returns `(added, already_present)`:
+      - `added`: providers we just wrote to the profile config.
+      - `already_present`: providers we left alone because the profile
+        config already has a `custom_providers:` block (idempotency:
+        scientia does not edit a hand-managed list).
+
+    Raises RuntimeError when a needed name has no matching entry in
+    `host_providers` (caller should fix the host config or remove the
+    reference from `hermes.profiles`).
+    """
+    if not needed_names:
+        return [], []
+    cfg_path = profile_config_path(profile_name, profiles_root=profiles_root)
+    existing_text = (
+        cfg_path.read_text(encoding="utf-8") if cfg_path.exists() else ""
+    )
+    if "custom_providers:" in existing_text:
+        return [], sorted(needed_names)
+
+    by_name = {
+        p.get("name"): p for p in host_providers
+        if isinstance(p, dict) and isinstance(p.get("name"), str)
+    }
+    missing = sorted(n for n in needed_names if n not in by_name)
+    if missing:
+        raise RuntimeError(
+            f"propagate_custom_providers: profile={profile_name!r} references "
+            f"custom providers not in host config: {missing}. Fix: add them "
+            f"to ~/.hermes/config.yaml (custom_providers:) or remove the "
+            f"reference from development/config.yaml hermes.profiles."
+        )
+
+    entries = [by_name[name] for name in sorted(needed_names)]
+    yaml_lines = ["custom_providers:"]
+    yaml_lines.extend(_emit_list(entries, indent=0))
+    new_block = "\n".join(yaml_lines) + "\n"
+
+    if not existing_text.strip() or existing_text.strip() == "{}":
+        new_text = new_block
+    else:
+        sep = "" if existing_text.endswith("\n") else "\n"
+        new_text = existing_text + sep + new_block
+
+    cfg_path.parent.mkdir(parents=True, exist_ok=True)
+    cfg_path.write_text(new_text, encoding="utf-8")
+    return sorted(needed_names), []
