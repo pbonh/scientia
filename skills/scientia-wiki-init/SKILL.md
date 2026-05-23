@@ -14,6 +14,7 @@ Scaffold the on-disk layout scientia depends on, in this exact order:
 
 ```
 <repo>/
+├── AGENTS.md                # how AI agents operate in this repo (front door)
 ├── raw/                     # immutable source documents
 ├── wiki/
 │   ├── index.md             # master catalog
@@ -48,6 +49,7 @@ Scaffold the on-disk layout scientia depends on, in this exact order:
 2. **Copy templates.** All templates live in `assets/templates/`,
    mirroring the on-disk layout:
 
+   - `assets/templates/AGENTS.md.tmpl` → `AGENTS.md`
    - `assets/templates/wiki/index.md.tmpl` → `wiki/index.md`
    - `assets/templates/wiki/log.md.tmpl` → `wiki/log.md`
    - `assets/templates/development/config.yaml.tmpl` → `development/config.yaml`

@@ -50,6 +50,7 @@ DIRS = [
 
 # Templates to copy: relative path under assets/templates/ -> destination in repo.
 TEMPLATES = {
+    "AGENTS.md.tmpl":                           "AGENTS.md",
     "wiki/index.md.tmpl":                       "wiki/index.md",
     "wiki/log.md.tmpl":                         "wiki/log.md",
     "development/config.yaml.tmpl":             "development/config.yaml",
