@@ -50,33 +50,50 @@ hermes:
   # with a model chosen for the role's workload. To opt out and inherit
   # the Hermes host-level default model, comment out the `profiles:`
   # block entirely or set it to `{}`.
+  # `agent.max_turns` per role tunes the worker's iteration budget
+  # (default in Hermes is 90). Workers that hit the cap exit with
+  # `⚠ Iteration budget reached (N/N) — response may be incomplete`
+  # and the task transitions to `blocked`. Defaults below are scientia's
+  # opinion on each role's typical workload — raise if you see workers
+  # park at the cap with real work remaining.
   profiles:
-    # Smartest model — writes code and tests against the Gherkin scenario.
+    # Heaviest loop: read task → write code → run tests → debug → commit.
+    # Implementer tasks routinely run 100+ turns on non-trivial work.
     implementer:
       model:
         provider: custom:fireworks
         default: accounts/fireworks/models/glm-5p1
+      agent:
+        max_turns: 200
 
     # Largest context — reads the full diff, the implementer's branch,
-    # plus every ADR cited by the scenario in one pass.
+    # plus every ADR cited by the scenario in one pass. Mostly tool
+    # calls (read, grep, run-checks), few write cycles.
     reviewer:
       model:
         provider: custom:fireworks
         default: accounts/fireworks/models/deepseek-v4-pro
+      agent:
+        max_turns: 120
 
-    # Good all-around — merge preflights, rebase, post comment. No
-    # heavy reasoning; favors throughput.
+    # Rebase + preflight + merge + comment, plus recovery paths
+    # (sibling-respawn, fixup spawning). Several phases, mechanical
+    # but with retry budget for failed preflights.
     integrator:
       model:
         provider: custom:fireworks
         default: accounts/fireworks/models/kimi-k2p6
+      agent:
+        max_turns: 150
 
-    # Good all-around — synthesizes finished child handoffs into the
-    # spec's Implementation Evidence section.
+    # Reads N finished child handoffs, writes one synthesis comment.
+    # Bounded by spec size; rarely needs more than a few dozen turns.
     aggregator:
       model:
         provider: custom:fireworks
         default: accounts/fireworks/models/qwen3p6-plus
+      agent:
+        max_turns: 60
 
 # Emit policy.
 emit:

@@ -153,6 +153,57 @@ class ValidateProfilesTests(unittest.TestCase):
                 {"implementer": {"model_aliases": {"fav": "claude-sonnet-4.6"}}}
             )
 
+    # ---- agent.max_turns -----------------------------------------------
+
+    def test_accepts_agent_max_turns(self):
+        block = {"implementer": {"agent": {"max_turns": 200}}}
+        self.assertEqual(pm.validate_profiles(block), block)
+
+    def test_accepts_agent_alongside_model(self):
+        block = {
+            "implementer": {
+                "model": {"default": "claude-opus-4.7"},
+                "agent": {"max_turns": 200},
+            },
+        }
+        self.assertEqual(pm.validate_profiles(block), block)
+
+    def test_accepts_empty_agent_block(self):
+        # Benign — flattens to nothing, no leaves to apply.
+        block = {"implementer": {"agent": {}}}
+        self.assertEqual(pm.validate_profiles(block), block)
+
+    def test_rejects_unknown_agent_key(self):
+        with self.assertRaises(pm.ProfileConfigError) as ctx:
+            pm.validate_profiles(
+                {"implementer": {"agent": {"gateway_timeout": 1800}}}
+            )
+        self.assertIn("gateway_timeout", str(ctx.exception))
+
+    def test_rejects_non_integer_max_turns(self):
+        for bad in ("200", 200.0, None, []):
+            with self.assertRaises(pm.ProfileConfigError) as ctx:
+                pm.validate_profiles(
+                    {"implementer": {"agent": {"max_turns": bad}}}
+                )
+            self.assertIn("max_turns", str(ctx.exception))
+
+    def test_rejects_non_positive_max_turns(self):
+        for bad in (0, -1, -200):
+            with self.assertRaises(pm.ProfileConfigError) as ctx:
+                pm.validate_profiles(
+                    {"implementer": {"agent": {"max_turns": bad}}}
+                )
+            self.assertIn("max_turns", str(ctx.exception))
+
+    def test_rejects_boolean_max_turns(self):
+        # bool is a subclass of int — must still be rejected.
+        with self.assertRaises(pm.ProfileConfigError) as ctx:
+            pm.validate_profiles(
+                {"implementer": {"agent": {"max_turns": True}}}
+            )
+        self.assertIn("max_turns", str(ctx.exception))
+
 
 # ---------------------------------------------------------------------------
 # flatten_profile
@@ -191,6 +242,12 @@ class FlattenProfileTests(unittest.TestCase):
             "model_aliases.fav.model": "claude-sonnet-4.6",
             "model_aliases.fav.provider": "anthropic",
         })
+
+    def test_flattens_agent_block(self):
+        flat = pm.flatten_profile({"agent": {"max_turns": 200}})
+        # max_turns flows through _stringify -> str(200) = "200" so
+        # apply_one_profile can pass it to `hermes config set`.
+        self.assertEqual(flat, {"agent.max_turns": "200"})
 
     def test_stringifies_none_as_empty_quoted(self):
         flat = pm.flatten_profile({"model": {"base_url": None}})

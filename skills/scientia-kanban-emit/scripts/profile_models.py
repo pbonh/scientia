@@ -25,10 +25,16 @@ from typing import Any, Callable, Dict, Iterable, List, Optional, Set, Tuple
 ROLES = frozenset({"implementer", "reviewer", "integrator", "aggregator"})
 
 # Per-role top-level keys, mirroring Hermes' per-profile config.yaml.
-ROLE_TOP_KEYS = frozenset({"model", "auxiliary", "model_aliases"})
+ROLE_TOP_KEYS = frozenset({"model", "auxiliary", "model_aliases", "agent"})
 
 # Keys allowed under `model:` (Hermes' main-model block).
 MODEL_KEYS = frozenset({"provider", "default", "base_url", "api_mode"})
+
+# Keys allowed under `agent:` (per-profile agent-loop tuning).
+# Narrow allowlist on purpose — Hermes accepts many keys here, but
+# scientia only surfaces the ones with a per-role rationale. Add more
+# as concrete need appears; widening is backwards-compatible.
+AGENT_KEYS = frozenset({"max_turns"})
 
 # Auxiliary task names per the Hermes docs (configuring-models page).
 AUXILIARY_TASKS = frozenset({
@@ -114,8 +120,27 @@ def _validate_role_block(role: str, block: dict) -> None:
             _validate_model_block(role, sub)
         elif top_key == "auxiliary":
             _validate_auxiliary_block(role, sub)
+        elif top_key == "agent":
+            _validate_agent_block(role, sub)
         else:  # model_aliases
             _validate_model_aliases_block(role, sub)
+
+
+def _validate_agent_block(role: str, block: dict) -> None:
+    for key, value in block.items():
+        if key not in AGENT_KEYS:
+            raise ProfileConfigError(
+                f"hermes.profiles.{role}.agent: unknown key {key!r}; "
+                f"expected one of {sorted(AGENT_KEYS)}"
+            )
+        if key == "max_turns":
+            # bool is a subclass of int — reject explicitly.
+            if isinstance(value, bool) or not isinstance(value, int) \
+                    or value < 1:
+                raise ProfileConfigError(
+                    f"hermes.profiles.{role}.agent.max_turns must be a "
+                    f"positive integer, got {value!r}"
+                )
 
 
 def _validate_model_block(role: str, block: dict) -> None:

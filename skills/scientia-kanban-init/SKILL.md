@@ -1,6 +1,6 @@
 ---
 name: scientia-kanban-init
-description: One-shot Hermes Kanban bootstrap for the host. Creates the four scientia agent profile directories via `hermes profile create`, writes their SOUL.md bodies from this skill's assets/profiles/, applies per-profile model configuration declared under `hermes.profiles` in development/config.yaml, symlinks the scientia skills (kanban-worker, grill, …) into both `~/.hermes/skills/` (for emit-time `--skill` validation) and each `~/.hermes/profiles/<name>/skills/` (for worker-time skill loading; required — workers crash on spawn without it), verifies the hermes CLI is on PATH and the kanban.db path declared in development/config.yaml is writable, applies the per-repo `hermes.max_concurrent_children` cap to the host's `delegation.max_concurrent_children`, and confirms the Hermes gateway is up. Run once per host (not per repo) on first scientia use, or whenever the user says "initialize Hermes". Idempotent — never overwrites a hand-edited SOUL.md or pre-existing skill symlink; per-profile model config is authoritative and re-applied to converge.
+description: One-shot Hermes Kanban bootstrap for the host. Creates the four scientia agent profile directories via `hermes profile create`, writes their SOUL.md bodies from this skill's assets/profiles/, applies per-profile model configuration declared under `hermes.profiles` in development/config.yaml (propagating any referenced host `custom_providers` entries into each profile's own config.yaml so workers can resolve `custom:<name>`), runs an API-key reachability preflight that refuses init when a declared `custom:<name>` provider's `key_env` is absent from process env, host `.env`, and the profile's own `.env`, symlinks the scientia skills (kanban-worker, grill, …) into both `~/.hermes/skills/` (for emit-time `--skill` validation) and each `~/.hermes/profiles/<name>/skills/` (for worker-time skill loading; required — workers crash on spawn without it), verifies the hermes CLI is on PATH and the kanban.db path declared in development/config.yaml is writable, propagates the per-repo `hermes.max_concurrent_children` cap to *both* `~/.hermes/config.yaml` and each scientia profile's `delegation.max_concurrent_children` (so sub-delegations from a worker honour the same cap), and confirms the Hermes gateway is up. Run once per host (not per repo) on first scientia use, or whenever the user says "initialize Hermes". Idempotent — never overwrites a hand-edited SOUL.md or pre-existing skill symlink; per-profile model config is authoritative and re-applied to converge; profile configs that already declare `custom_providers:` are left alone.
 license: MIT
 metadata:
   bundle: scientia
@@ -126,6 +126,29 @@ Make this host ready to run the scientia kanban phase.
    and refuses to emit on drift — so any divergence after this step is
    surfaced before workers spawn.
 
+3c. **Verify API keys reach worker context.** When any role in
+   `hermes.profiles` references `custom:<name>`, the matching host
+   `custom_providers` entry has a `key_env` (e.g. `FIREWORKS_API_KEY`).
+   For a spawned worker to authenticate, that var must be set in at
+   least one of: the current process env, `~/.hermes/.env`, or the
+   profile's own `~/.hermes/profiles/<resolved-name>/.env`. Run:
+
+   ```bash
+   python3 "$BUNDLE_ROOT/skills/scientia-kanban-init/scripts/check_env_keys.py" \
+     --repo-root "$REPO_ROOT"
+   ```
+
+   Exit 0 means every required key is reachable. Exit 1 prints a
+   refusal naming each missing var and which profile(s) need it; the
+   skill must refuse to mark init complete. Remediation is one of:
+   set the var in your shell, add it to `~/.hermes/.env`, or add it
+   to `~/.hermes/profiles/<name>/.env`. scientia does not write
+   secrets — these edits are the user's.
+
+   Keyless custom providers (no `key_env` in the host entry) are
+   skipped. Built-in providers (`anthropic`, `openrouter`, …) handle
+   their own key resolution and are not part of this gate.
+
 4. **Install the scientia skills — both host-globally and per-profile.**
    Hermes resolves skill names in two independent places:
 
@@ -212,30 +235,41 @@ Make this host ready to run the scientia kanban phase.
 
    Refuse to mark init complete if any profile fails the check.
 
-6. **Apply the concurrency cap.** Read `development/config.yaml` for
-   `hermes.max_concurrent_children` (default `3`). Refuse with a clear
-   message if the value is present but not a positive integer.
-
-   This value maps to Hermes' `delegation.max_concurrent_children`
+6. **Apply the concurrency cap — host *and* every profile.**
+   `hermes.max_concurrent_children` in `development/config.yaml`
+   (default `3`) maps to Hermes' `delegation.max_concurrent_children`
    (see https://hermes-agent.nousresearch.com/docs/guides/delegation-patterns#tuning-concurrency-and-depth
    — "parallel batch size per `delegate_task` call", default 3, range >=1).
 
-   Check the host's current value by reading `~/.hermes/config.yaml`
-   directly (look for `max_concurrent_children:` under the `delegation:`
-   top-level block). If it differs from the desired value, apply with:
+   Hermes profiles are independent home directories, so writing the cap
+   only to `~/.hermes/config.yaml` does **not** affect profile workers
+   that sub-delegate (e.g., the integrator spawning a fixup task); each
+   profile's own `config.yaml` controls its delegation depth. Without
+   per-profile propagation, raising the host cap to 5 silently leaves
+   integrator-spawned fixups capped at the profile default of 3. Run:
 
    ```bash
-   hermes config set delegation.max_concurrent_children "$N"
+   python3 "$BUNDLE_ROOT/skills/scientia-kanban-init/scripts/apply_concurrency.py" \
+     --repo-root "$REPO_ROOT"
    ```
 
-   Then append to `development/log.md`:
+   The script reads the declared cap, refuses with a clear message if
+   it isn't a positive integer, then walks five targets — the host plus
+   each scientia profile (`scientia-{implementer,reviewer,integrator,aggregator}`,
+   or the names declared in `hermes.profile_names`). For each target it
+   reads the effective `delegation.max_concurrent_children` via
+   `hermes [-p <name>] config show --json` and runs
+   `hermes [-p <name>] config set delegation.max_concurrent_children <N>`
+   only when the value differs. Per-target lines land in
+   `development/log.md`:
 
    ```
-   - YYYY-MM-DDTHH:MM:SSZ — scientia-kanban-init — concurrency-applied — — N=<N>
+   - <ISO-Z> — scientia-kanban-init — concurrency-applied — — target=host N=<N> previous=<old>
+   - <ISO-Z> — scientia-kanban-init — concurrency-applied — — target=<role>(<resolved-name>) N=<N> previous=<old>
    ```
 
-   When the host already matches, log `concurrency-already-set N=<N>`
-   and skip the write.
+   When a target already matches, the script logs
+   `concurrency-already-set` instead and skips the write.
 
    **Host-vs-repo scope.** `~/.hermes/config.yaml` is host-global;
    `development/config.yaml` is per-repo. If you run scientia from

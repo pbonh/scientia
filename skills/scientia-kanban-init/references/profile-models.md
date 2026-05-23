@@ -117,6 +117,7 @@ unless they explicitly add the block.
 | `model`        | mapping              | no       | Main-model block (see below). |
 | `auxiliary`    | mapping              | no       | Per-task overrides (see below). |
 | `model_aliases`| mapping              | no       | Named shortcuts (see below). |
+| `agent`        | mapping              | no       | Per-profile agent-loop tuning (see below). |
 
 Anything else under `<role>` is rejected at load time.
 
@@ -159,6 +160,32 @@ Each task block accepts:
 `provider: auto` and `provider: ''` are treated as equivalent for
 drift-check purposes (both mean "let Hermes pick").
 
+### `hermes.profiles.<role>.agent`
+
+Per-profile overrides for Hermes' agent-loop tuning. Profile-isolated:
+each worker reads its *own* profile's `agent:` block — there is no
+inheritance from `~/.hermes/config.yaml`. Hermes accepts many keys
+here; scientia's allowlist starts narrow and grows as concrete need
+appears.
+
+| Key         | Type | Required | Notes |
+|-------------|------|----------|-------|
+| `max_turns` | int  | no       | Per-task iteration budget. Hermes default is 90. Must be a positive integer. |
+
+Anything else under `agent` is rejected at load time. (Widening the
+allowlist is backwards-compatible — existing repos with only
+`max_turns` are unaffected.)
+
+**Why `max_turns` is per-role.** Workloads differ sharply: an
+implementer task that writes code, runs tests, debugs, and commits
+routinely needs 100+ turns; an aggregator that synthesizes finished
+child handoffs into one comment is bounded by spec size and rarely
+exceeds a few dozen. A single host-level cap forces every role to the
+slowest one. The bundled template ships role-specific defaults
+(implementer 200 / reviewer 120 / integrator 150 / aggregator 60);
+raise them when you see workers park at the cap with a
+`⚠ Iteration budget reached (N/N)` message still mid-task.
+
 ### `hermes.profiles.<role>.model_aliases.<alias>`
 
 Named shortcuts for use inside the profile's agent. Both keys are
@@ -174,7 +201,7 @@ required:
 - Role names must be one of `implementer`, `reviewer`, `integrator`,
   `aggregator`. Any other key under `hermes.profiles` is rejected.
 - Top-level keys under a role must be one of `model`, `auxiliary`,
-  `model_aliases`. Anything else is rejected.
+  `model_aliases`, `agent`. Anything else is rejected.
 - Keys under `model` must be one of `provider`, `default`, `base_url`,
   `api_mode`.
 - Tasks under `auxiliary` must be one of the seven listed above.
@@ -182,6 +209,8 @@ required:
   `api_key`, `timeout`, `extra_body`, `download_timeout`.
 - Each `model_aliases.<alias>` must have exactly `model` and `provider`
   keys — no more, no less.
+- Keys under `agent` must be in the allowlist (currently `max_turns`).
+  `max_turns` must be a positive integer.
 - scientia does **not** validate that model strings exist on the chosen
   provider. That's Hermes' job at `config set` time (which validates
   what it can), and ultimately the provider's call at first use.
@@ -197,7 +226,8 @@ hermes:
     integrator:  scientia-integrator
     aggregator:  scientia-aggregator
   profiles:
-    # Premium main model for the role that writes code.
+    # Premium main model + generous iteration budget for the role that
+    # writes code.
     implementer:
       model:
         provider: anthropic
@@ -206,18 +236,25 @@ hermes:
         vision:
           provider: openrouter
           model: google/gemini-2.5-flash
+      agent:
+        max_turns: 200
 
     # Mid-tier for review.
     reviewer:
       model:
         provider: anthropic
         default: claude-sonnet-4.6
+      agent:
+        max_turns: 120
 
-    # Cheap model for the aggregator (just summarizes finished children).
+    # Cheap model + tight budget for the aggregator (just summarizes
+    # finished children).
     aggregator:
       model:
         provider: anthropic
         default: claude-haiku-4.5
+      agent:
+        max_turns: 60
 
     # integrator omitted -> inherits Hermes host default.
 ```
