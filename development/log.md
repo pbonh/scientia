@@ -23,3 +23,5 @@ Events include: `bootstrap-complete`, `manifest-bound`, `proposal-drafted`,
 - 2026-05-24T00:02:22Z — scientia-wiki-lint — completed — — critical=0 warning=1 suggestion=292
 - 2026-05-23T21:35:00Z — scientia-wiki-lint — completed — — critical=0 warning=1 suggestion=298
 - 2026-05-23T22:20:00Z — scientia-wiki-lint — completed — — critical=0 warning=1 suggestion=0
+- 2026-05-24T19:37:07Z — orchestrator — delegate — — scientia-wiki-strategy (idle wiki, no tenants; DDD pass before first bind)
+- 2026-05-24T19:51:11Z — scientia-wiki-strategy — completed — — 16 bounded contexts (5 core / 6 supporting / 5 generic), 6 context maps; 224 concepts + 83 entities partitioned 1:1, 514 links resolve

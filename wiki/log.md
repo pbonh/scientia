@@ -382,3 +382,25 @@ Append-only record of every change to the wiki. Each entry is one line:
 - 2026-05-23T22:15:00Z — scientia-wiki-ingest — updated — entities/intent-driven-dev.md — added intent-driven-template starter from raw/intent-driven-template/index.md
 - 2026-05-23T22:15:00Z — scientia-wiki-ingest — updated — entities/openspec-schemas.md — documented bundled intent-driven schema from raw/intent-driven-template/intent-driven-schema.md
 - 2026-05-23T22:15:00Z — scientia-wiki-ingest — updated — index.md — added 1 summary, 6 concepts, 3 entities; stats 263 pages / 23 sources
+- 2026-05-24T19:50:27Z — scientia-wiki-strategy — context-created — wiki/contexts/knowledge-base-and-wiki.md
+- 2026-05-24T19:50:27Z — scientia-wiki-strategy — context-created — wiki/contexts/spec-driven-development.md
+- 2026-05-24T19:50:27Z — scientia-wiki-strategy — context-created — wiki/contexts/architecture-decision-records.md
+- 2026-05-24T19:50:27Z — scientia-wiki-strategy — context-created — wiki/contexts/autonomous-agent-orchestration.md
+- 2026-05-24T19:50:27Z — scientia-wiki-strategy — context-created — wiki/contexts/agent-skills-standard.md
+- 2026-05-24T19:50:27Z — scientia-wiki-strategy — context-created — wiki/contexts/llm-reasoning.md
+- 2026-05-24T19:50:27Z — scientia-wiki-strategy — context-created — wiki/contexts/coding-agent-platform.md
+- 2026-05-24T19:50:27Z — scientia-wiki-strategy — context-created — wiki/contexts/software-design-principles.md
+- 2026-05-24T19:50:27Z — scientia-wiki-strategy — context-created — wiki/contexts/type-theory.md
+- 2026-05-24T19:50:27Z — scientia-wiki-strategy — context-created — wiki/contexts/typescript.md
+- 2026-05-24T19:50:27Z — scientia-wiki-strategy — context-created — wiki/contexts/rust-systems-programming.md
+- 2026-05-24T19:50:27Z — scientia-wiki-strategy — context-created — wiki/contexts/terminal-workspace.md
+- 2026-05-24T19:50:27Z — scientia-wiki-strategy — context-created — wiki/contexts/shell-and-data-pipeline.md
+- 2026-05-24T19:50:27Z — scientia-wiki-strategy — context-created — wiki/contexts/editor-extensibility.md
+- 2026-05-24T19:50:27Z — scientia-wiki-strategy — context-created — wiki/contexts/fuzzy-finder.md
+- 2026-05-24T19:50:27Z — scientia-wiki-strategy — context-created — wiki/contexts/infrastructure-automation.md
+- 2026-05-24T19:50:27Z — scientia-wiki-strategy — context-map-created — wiki/context-maps/scientia-domain-landscape.md
+- 2026-05-24T19:50:27Z — scientia-wiki-strategy — context-map-created — wiki/context-maps/scientia-pipeline.md
+- 2026-05-24T19:50:27Z — scientia-wiki-strategy — context-map-created — wiki/context-maps/intent-shared-kernel.md
+- 2026-05-24T19:50:27Z — scientia-wiki-strategy — context-map-created — wiki/context-maps/agent-ecosystem.md
+- 2026-05-24T19:50:27Z — scientia-wiki-strategy — context-map-created — wiki/context-maps/language-and-types.md
+- 2026-05-24T19:50:27Z — scientia-wiki-strategy — context-map-created — wiki/context-maps/terminal-tooling.md

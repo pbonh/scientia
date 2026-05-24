@@ -1,7 +1,7 @@
 ---
 title: "Knowledge Base Index"
 type: index
-updated: 2026-05-23
+updated: 2026-05-24
 ---
 
 # ars.scientia_rewrite — Knowledge Base Index
@@ -369,13 +369,33 @@ entry here.
 
 | Page | Bounded Context | Boundary | Updated |
 |------|-----------------|----------|---------|
-<!-- entries added by scientia-wiki-strategy -->
+| [[contexts/knowledge-base-and-wiki]] | core | Markdown KB construction, ingest, lint, query | 2026-05-24 |
+| [[contexts/spec-driven-development]] | core | OpenSpec delta-specs, Gherkin, intent schema | 2026-05-24 |
+| [[contexts/architecture-decision-records]] | core | ADRs, ASRs, Y-statements, MADR, C4 | 2026-05-24 |
+| [[contexts/autonomous-agent-orchestration]] | core | Hermes Kanban multi-agent execution | 2026-05-24 |
+| [[contexts/agent-skills-standard]] | core | portable SKILL.md format & ecosystem | 2026-05-24 |
+| [[contexts/llm-reasoning]] | supporting | test-time-scaling, deliberation | 2026-05-24 |
+| [[contexts/coding-agent-platform]] | supporting | Pi agent extensions & subagents | 2026-05-24 |
+| [[contexts/software-design-principles]] | supporting | maintainable-code craft (Python) | 2026-05-24 |
+| [[contexts/type-theory]] | supporting | language-agnostic type-driven design | 2026-05-24 |
+| [[contexts/typescript]] | supporting | TypeScript language & toolchain | 2026-05-24 |
+| [[contexts/rust-systems-programming]] | supporting | Rust language, Cargo, error handling | 2026-05-24 |
+| [[contexts/terminal-workspace]] | generic | zellij multiplexer (panes/PTY/ANSI) | 2026-05-24 |
+| [[contexts/shell-and-data-pipeline]] | generic | nushell structured-data shell | 2026-05-24 |
+| [[contexts/editor-extensibility]] | generic | neovim Lua/LSP/treesitter | 2026-05-24 |
+| [[contexts/fuzzy-finder]] | generic | television fuzzy finder | 2026-05-24 |
+| [[contexts/infrastructure-automation]] | generic | ansible config management | 2026-05-24 |
 
 ## Context Maps
 
 | Page | Topic | Contexts | False Cognates | Updated |
 |------|-------|----------|----------------|---------|
-<!-- entries added by scientia-wiki-strategy -->
+| [[context-maps/scientia-domain-landscape]] | master map of all 16 contexts | 16 | session, plugin, skill, status, archive, … | 2026-05-24 |
+| [[context-maps/scientia-pipeline]] | the core five as a closed loop | 5 | archive, status, context, ingest | 2026-05-24 |
+| [[context-maps/intent-shared-kernel]] | Spec ↔ ADR shared kernel | 2 | design, decision | 2026-05-24 |
+| [[context-maps/agent-ecosystem]] | Skills ↔ Hermes ↔ Pi ↔ Reasoning | 4 | skill, subagent, provider, session, plugin | 2026-05-24 |
+| [[context-maps/language-and-types]] | Rust ↔ Type Theory ↔ TS ↔ Design | 4 | enum, interface, decorator, generics | 2026-05-24 |
+| [[context-maps/terminal-tooling]] | Multiplexer ↔ Shell ↔ Editor ↔ Finder | 4 | plugin, session, channel, template | 2026-05-24 |
 
 ## Decisions
 
@@ -391,7 +411,8 @@ entry here.
 
 ## Statistics
 
-- **Total pages**: 263
+- **Total pages**: 285
 - **Sources ingested**: 23
-- **Bounded contexts**: 0
+- **Bounded contexts**: 16
+- **Context maps**: 6
 - **In-flight changes**: 0
