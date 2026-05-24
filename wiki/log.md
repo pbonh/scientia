@@ -366,3 +366,19 @@ Append-only record of every change to the wiki. Each entry is one line:
 - 2026-05-23T21:30:00Z — scientia-wiki-ingest — updated — concepts/custom-workflow-schema.md — added spec-driven-with-adr variant and openspec-schemas catalog from raw/openspec-schemas/
 - 2026-05-23T21:30:00Z — scientia-wiki-ingest — updated — concepts/architectural-decision-record.md — added OpenSpec durable-ADR storage perspective from raw/spec-driven-development-with-adr.md
 - 2026-05-23T21:30:00Z — scientia-wiki-ingest — updated — index.md — added 2 summaries, 3 concepts, 3 entities; stats 253 pages / 22 sources
+- 2026-05-23T22:15:00Z — scientia-wiki-ingest — created — summaries/intent-driven-template.md — from raw/intent-driven-template/
+- 2026-05-23T22:15:00Z — scientia-wiki-ingest — created — concepts/intent-driven-schema.md — from raw/intent-driven-template/intent-driven-schema.md
+- 2026-05-23T22:15:00Z — scientia-wiki-ingest — created — concepts/c4-model.md — from raw/intent-driven-template/skills.md
+- 2026-05-23T22:15:00Z — scientia-wiki-ingest — created — concepts/gherkin.md — from raw/intent-driven-template/skills.md
+- 2026-05-23T22:15:00Z — scientia-wiki-ingest — created — concepts/openspec-git-discipline.md — from raw/intent-driven-template/skills.md
+- 2026-05-23T22:15:00Z — scientia-wiki-ingest — created — concepts/design-interrogation.md — from raw/intent-driven-template/skills.md
+- 2026-05-23T22:15:00Z — scientia-wiki-ingest — created — concepts/madr.md — from raw/intent-driven-template/skills.md
+- 2026-05-23T22:15:00Z — scientia-wiki-ingest — created — entities/intent-driven-template.md — from raw/intent-driven-template/
+- 2026-05-23T22:15:00Z — scientia-wiki-ingest — created — entities/opencode.md — from raw/intent-driven-template/
+- 2026-05-23T22:15:00Z — scientia-wiki-ingest — created — entities/superpowers.md — from raw/intent-driven-template/
+- 2026-05-23T22:15:00Z — scientia-wiki-ingest — updated — concepts/architectural-decision-record.md — added MADR/Nygard ADR template families from raw/intent-driven-template/skills.md
+- 2026-05-23T22:15:00Z — scientia-wiki-ingest — updated — concepts/custom-workflow-schema.md — cross-linked intent-driven schema from raw/intent-driven-template/intent-driven-schema.md
+- 2026-05-23T22:15:00Z — scientia-wiki-ingest — updated — concepts/spec-driven-with-adr-schema.md — cross-linked sibling intent-driven-schema
+- 2026-05-23T22:15:00Z — scientia-wiki-ingest — updated — entities/intent-driven-dev.md — added intent-driven-template starter from raw/intent-driven-template/index.md
+- 2026-05-23T22:15:00Z — scientia-wiki-ingest — updated — entities/openspec-schemas.md — documented bundled intent-driven schema from raw/intent-driven-template/intent-driven-schema.md
+- 2026-05-23T22:15:00Z — scientia-wiki-ingest — updated — index.md — added 1 summary, 6 concepts, 3 entities; stats 263 pages / 23 sources

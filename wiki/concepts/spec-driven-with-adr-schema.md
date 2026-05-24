@@ -86,6 +86,7 @@ the same over-formatting pitfall noted on
 ## Related Concepts
 
 - [[concepts/custom-workflow-schema]] — the OpenSpec mechanism this is built on
+- [[concepts/intent-driven-schema]] — its sibling schema (same graph; emphasizes Gherkin specs)
 - [[concepts/durable-artifacts-vs-scaffolding]] — the lifecycle principle it encodes
 - [[concepts/spec-adr-dual-representation]] — what specs vs ADRs each capture
 - [[concepts/architectural-decision-record]] — the durable artifact it produces

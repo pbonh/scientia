@@ -4,7 +4,7 @@ type: concept
 tags: [concept, architecture, documentation, adr]
 created: 2026-05-21
 updated: 2026-05-23
-sources: ["raw/adr-github-home.html", "raw/spec-driven-development-with-adr.md"]
+sources: ["raw/adr-github-home.html", "raw/spec-driven-development-with-adr.md", "raw/intent-driven-template/skills.md"]
 confidence: high
 ---
 
@@ -31,7 +31,7 @@ future proposal reuse a decision instead of rediscovering it.
 - **One decision per record**: Each ADR addresses exactly one architectural choice; bundling unrelated decisions is discouraged.
 - **Immutable history**: Once accepted, an ADR is not edited in place; it is superseded by a newer ADR if the decision changes.
 - **Status lifecycle**: Common statuses include *proposed*, *accepted*, *deprecated*, *superseded*.
-- **Lightweight format**: Many teams use Markdown with a simple template (e.g., the [[concepts/y-statement-format|Y-statement format]]).
+- **Lightweight format**: Many teams use Markdown with a simple template. Common families include [[concepts/madr|MADR]] (full and minimal), the classic Nygard format, and the one-line [[concepts/y-statement-format|Y-statement]]; tooling such as the [[entities/intent-driven-template]]'s ADR skill lets a project pick one and remember it as a `preferred-style`.
 
 ## When To Use
 
@@ -52,6 +52,8 @@ future proposal reuse a decision instead of rediscovering it.
 - [[concepts/decision-log]] — the aggregate collection of ADRs.
 - [[concepts/architectural-knowledge-management]] — the discipline that treats ADRs as first-class artifacts.
 - [[concepts/y-statement-format]] — a concise template for expressing decision rationale.
+- [[concepts/madr]] — the Markdown ADR template family (full/minimal).
+- [[concepts/intent-driven-schema]] — an OpenSpec schema whose `adr` stage emits durable ADRs.
 - [[concepts/spec-driven-with-adr-schema]] — an OpenSpec schema that produces durable ADRs outside the change folder.
 - [[concepts/durable-artifacts-vs-scaffolding]] — why ADR storage location determines its longevity.
 - [[concepts/spec-adr-dual-representation]] — how ADRs and specs together describe a system.
@@ -61,3 +63,4 @@ future proposal reuse a decision instead of rediscovering it.
 - [adr.github.io](https://adr.github.io) — Motivation and Definitions section.
 - [Documenting Architecture Decisions](https://cognitect.com/blog/2011/11/15/documenting-architecture-decisions.html) — Michael Nygard (2011)
 - [Architectural Decision Records with Spec-Driven Development using OpenSpec](https://intent-driven.dev/blog/2026/04/29/spec-driven-development-with-adr/) — Hari Krishnan (2026-04-29) (`raw/spec-driven-development-with-adr.md`)
+- [intent-driven-template architectural-decision-records skill](https://github.com/intent-driven-dev/intent-driven-template/tree/main/.agents/skills/architectural-decision-records) (`raw/intent-driven-template/skills.md`)

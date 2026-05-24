@@ -4,7 +4,7 @@ type: entity
 tags: [entity, repository, openspec, schema]
 created: 2026-05-23
 updated: 2026-05-23
-sources: ["raw/openspec-schemas/"]
+sources: ["raw/openspec-schemas/", "raw/intent-driven-template/intent-driven-schema.md"]
 confidence: medium
 ---
 
@@ -34,12 +34,14 @@ dependency graph to a particular work style.
 
 - **Pick a schema by work style.** `minimalist` for a fast spec→execution path,
   `event-driven` for Event-Storming/AsyncAPI systems, `behaviour-driven` for
-  Gherkin GIVEN/WHEN/THEN, `intent-driven` for the full
-  proposal→specs→design→adr→tasks flow, `linearized` for Linear-tracker
+  Gherkin GIVEN/WHEN/THEN, [[concepts/intent-driven-schema|`intent-driven`]] for the
+  full proposal→specs→design→adr→tasks flow, `linearized` for Linear-tracker
   integration, and [[concepts/spec-driven-with-adr-schema|`spec-driven-with-adr`]]
   to add durable ADRs to the standard flow.
 - **Copy and activate, don't vendor the whole repo.** Teams lift the single
-  schema folder they want into their project and pin it.
+  schema folder they want into their project and pin it. The
+  [[entities/intent-driven-template]] does exactly this — it ships a bundled local
+  copy of the [[concepts/intent-driven-schema|`intent-driven`]] schema.
 - **Validate after install.** `openspec schema validate` catches a malformed or
   cyclic artifact graph before the schema is used.
 
@@ -47,3 +49,4 @@ dependency graph to a particular work style.
 
 - [openspec-schemas directory](https://github.com/intent-driven-dev/openspec-schemas/tree/main/openspec/schemas) (`raw/openspec-schemas/index.md`)
 - [spec-driven-with-adr schema](https://github.com/intent-driven-dev/openspec-schemas/tree/main/openspec/schemas/spec-driven-with-adr) (`raw/openspec-schemas/spec-driven-with-adr.md`)
+- [intent-driven schema (bundled copy)](https://github.com/intent-driven-dev/intent-driven-template/tree/main/openspec/schemas/intent-driven) (`raw/intent-driven-template/intent-driven-schema.md`)

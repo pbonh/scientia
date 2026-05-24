@@ -231,6 +231,12 @@ entry here.
 | [[concepts/spec-driven-with-adr-schema]] | openspec, adr, schema, workflow | medium | 2026-05-23 |
 | [[concepts/durable-artifacts-vs-scaffolding]] | architecture, documentation, openspec, lifecycle | medium | 2026-05-23 |
 | [[concepts/spec-adr-dual-representation]] | architecture, documentation, adr | medium | 2026-05-23 |
+| [[concepts/intent-driven-schema]] | openspec, schema, workflow, adr | high | 2026-05-23 |
+| [[concepts/c4-model]] | architecture, diagramming, documentation | high | 2026-05-23 |
+| [[concepts/gherkin]] | bdd, specification, behaviour-driven | high | 2026-05-23 |
+| [[concepts/openspec-git-discipline]] | openspec, git, workflow, process | high | 2026-05-23 |
+| [[concepts/design-interrogation]] | design, decision-making, workflow | medium | 2026-05-23 |
+| [[concepts/madr]] | architecture, adr, template | medium | 2026-05-23 |
 
 ## Entities
 
@@ -316,6 +322,9 @@ entry here.
 | [[entities/intent-driven-dev]] | organization, openspec, adr | 2026-05-23 |
 | [[entities/openspec-schemas]] | repository, openspec, schema | 2026-05-23 |
 | [[entities/hari-krishnan]] | person, openspec, adr | 2026-05-23 |
+| [[entities/intent-driven-template]] | repository, openspec, opencode, template | 2026-05-23 |
+| [[entities/opencode]] | tool, coding-agent, terminal | 2026-05-23 |
+| [[entities/superpowers]] | tool, agent-skills, plugin | 2026-05-23 |
 
 ## Summaries
 
@@ -348,6 +357,7 @@ entry here.
 | [[summaries/rust-book]] | raw/rust-book-book/ | rust, programming-language, systems-programming | 2026-05-23 |
 | [[summaries/spec-driven-development-with-adr]] | raw/spec-driven-development-with-adr.md | adr, openspec, spec-driven-development | 2026-05-23 |
 | [[summaries/openspec-schemas]] | raw/openspec-schemas/ | openspec, schema, workflow | 2026-05-23 |
+| [[summaries/intent-driven-template]] | raw/intent-driven-template/ | openspec, opencode, intent-driven-schema, gherkin | 2026-05-23 |
 
 ## Syntheses
 
@@ -381,7 +391,7 @@ entry here.
 
 ## Statistics
 
-- **Total pages**: 253
-- **Sources ingested**: 22
+- **Total pages**: 263
+- **Sources ingested**: 23
 - **Bounded contexts**: 0
 - **In-flight changes**: 0

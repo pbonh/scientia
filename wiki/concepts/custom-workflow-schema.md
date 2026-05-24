@@ -4,7 +4,7 @@ type: concept
 tags: [concept, workflow, customization, schema]
 created: 2026-05-21
 updated: 2026-05-23
-sources: ["raw/openspec-docs", "raw/openspec-schemas/"]
+sources: ["raw/openspec-docs", "raw/openspec-schemas/", "raw/intent-driven-template/intent-driven-schema.md"]
 confidence: high
 ---
 
@@ -89,6 +89,7 @@ Avoid when:
 - [[concepts/opsx-workflow]] — The engine that consumes schemas
 - [[concepts/fluid-workflow]] — Custom schemas are how teams encode their own fluidity
 - [[concepts/spec-driven-with-adr-schema]] — a concrete schema that adds a durable ADR stage
+- [[concepts/intent-driven-schema]] — a concrete schema mandating Gherkin specs + durable ADRs
 - [[concepts/durable-artifacts-vs-scaffolding]] — the lifecycle question every schema must answer per artifact
 
 ## Sources
