@@ -40,6 +40,14 @@ Scaffold the on-disk layout scientia depends on, in this exact order:
 
 ## Procedure
 
+0. **Collect the repo purpose.** Ask the user for 1–3 sentences
+   describing what this scientia-managed repo is for (e.g. *"Track
+   open-source LLM research papers and turn weekly findings into
+   design briefs."*). Echo the text back, get explicit confirmation,
+   then pass it verbatim as `bootstrap.py --purpose "<text>"`.
+   `bootstrap.py` rejects an empty or whitespace-only value with a
+   non-zero exit, so do not skip this step or pass `""`.
+
 1. **Check what's already there.** For every path above, decide:
    - missing → create from template
    - present + identical to template → leave alone
@@ -58,11 +66,12 @@ Scaffold the on-disk layout scientia depends on, in this exact order:
    - `assets/templates/openspec/schemas/intent-driven/*` → `openspec/schemas/intent-driven/`
 
    Each `.tmpl` file uses `{{repo_name}}` and `{{date}}` placeholders;
-   substitute at copy time.
+   `AGENTS.md.tmpl` additionally uses `{{repo_purpose}}` (from step 0)
+   and `{{bundle_version}}`. Substitute at copy time.
 
-3. **Run `scripts/bootstrap.py`** to perform the copy, substitution, and
-   directory creation. The script is idempotent and prints exactly what
-   it did.
+3. **Run `scripts/bootstrap.py --purpose "<text>"`** to perform the
+   copy, substitution, and directory creation. The script is
+   idempotent and prints exactly what it did.
 
 4. **Verify** by reading the resulting `wiki/index.md` and
    `development/config.yaml` and confirming the structure matches the
@@ -86,6 +95,10 @@ Scaffold the on-disk layout scientia depends on, in this exact order:
 - Overwrites a user-edited file (only creates missing files).
 - Installs Hermes profiles (that is `scientia-kanban-init`'s job).
 - Decides which bounded contexts exist (that is `scientia-wiki-strategy`'s job).
+
+This skill does prompt **once** — for the repo purpose in step 0 —
+and that is the only interactive question it asks; everything else is
+derived from the filesystem, clock, and bundle manifest.
 
 ## Upgrades
 

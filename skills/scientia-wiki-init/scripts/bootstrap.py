@@ -4,7 +4,7 @@
 Idempotent. Safe to re-run. Will not overwrite user-edited files.
 
 Usage:
-    bootstrap.py [--repo <path>] [--bundle-version <semver>]
+    bootstrap.py --purpose <text> [--repo <path>] [--bundle-version <semver>]
 """
 
 from __future__ import annotations
@@ -76,9 +76,17 @@ def main() -> int:
     ap.add_argument("--repo", default=os.getcwd())
     ap.add_argument("--bundle-version", default=None,
                     help="Override bundle version (default: read from scientia.json)")
+    ap.add_argument("--purpose", default=None,
+                    help="1-3 sentence description of this repo's purpose, rendered into AGENTS.md")
     args = ap.parse_args()
     if args.bundle_version is None:
         args.bundle_version = detect_bundle_version()
+
+    purpose = (args.purpose or "").strip()
+    if not purpose:
+        print("error: --purpose is required (1-3 sentences describing this repo's purpose)",
+              file=sys.stderr)
+        return 2
 
     repo = Path(args.repo).resolve()
     repo_name = repo.name
@@ -88,6 +96,7 @@ def main() -> int:
         "date": today,
         "now": utc_now(),
         "bundle_version": args.bundle_version,
+        "repo_purpose": purpose,
     }
 
     log_lines: list[str] = []
