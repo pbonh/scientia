@@ -1,7 +1,7 @@
 ---
 title: "Knowledge Base Index"
 type: index
-updated: 2026-05-24
+updated: 2026-05-26
 ---
 
 # ars.scientia_rewrite — Knowledge Base Index
@@ -232,7 +232,8 @@ entry here.
 | [[concepts/durable-artifacts-vs-scaffolding]] | architecture, documentation, openspec, lifecycle | medium | 2026-05-23 |
 | [[concepts/spec-adr-dual-representation]] | architecture, documentation, adr | medium | 2026-05-23 |
 | [[concepts/intent-driven-schema]] | openspec, schema, workflow, adr | high | 2026-05-23 |
-| [[concepts/c4-model]] | architecture, diagramming, documentation | high | 2026-05-23 |
+| [[concepts/c4-model]] | architecture, diagramming, documentation | high | 2026-05-26 |
+| [[concepts/c4-abstractions]] | architecture, diagramming, documentation | high | 2026-05-26 |
 | [[concepts/gherkin]] | bdd, specification, behaviour-driven | high | 2026-05-23 |
 | [[concepts/openspec-git-discipline]] | openspec, git, workflow, process | high | 2026-05-23 |
 | [[concepts/design-interrogation]] | design, decision-making, workflow | medium | 2026-05-23 |
@@ -297,6 +298,7 @@ entry here.
 | [[entities/michael-nygard]] | person, adr | 2026-05-21 |
 | [[entities/michael-keeling]] | person, adr | 2026-05-21 |
 | [[entities/mark-richards]] | person, adr | 2026-05-21 |
+| [[entities/simon-brown]] | person, architecture | 2026-05-26 |
 | [[entities/heavyskill]] | ai-research, project, llm-reasoning | 2026-05-21 |
 | [[entities/kimi-k2]] | llm, reasoning-model, moonshot-ai | 2026-05-21 |
 | [[entities/pacore]] | framework, reasoning, stepfun-ai | 2026-05-21 |
@@ -358,6 +360,7 @@ entry here.
 | [[summaries/spec-driven-development-with-adr]] | raw/spec-driven-development-with-adr.md | adr, openspec, spec-driven-development | 2026-05-23 |
 | [[summaries/openspec-schemas]] | raw/openspec-schemas/ | openspec, schema, workflow | 2026-05-23 |
 | [[summaries/intent-driven-template]] | raw/intent-driven-template/ | openspec, opencode, intent-driven-schema, gherkin | 2026-05-23 |
+| [[summaries/c4model-com-home]] | raw/c4model-com-home.md | architecture, diagramming, c4-model, abstractions | 2026-05-26 |
 
 ## Syntheses
 
@@ -411,8 +414,8 @@ entry here.
 
 ## Statistics
 
-- **Total pages**: 285
-- **Sources ingested**: 23
+- **Total pages**: 288
+- **Sources ingested**: 24
 - **Bounded contexts**: 16
 - **Context maps**: 6
 - **In-flight changes**: 0

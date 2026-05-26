@@ -404,3 +404,8 @@ Append-only record of every change to the wiki. Each entry is one line:
 - 2026-05-24T19:50:27Z — scientia-wiki-strategy — context-map-created — wiki/context-maps/agent-ecosystem.md
 - 2026-05-24T19:50:27Z — scientia-wiki-strategy — context-map-created — wiki/context-maps/language-and-types.md
 - 2026-05-24T19:50:27Z — scientia-wiki-strategy — context-map-created — wiki/context-maps/terminal-tooling.md
+- 2026-05-26T18:57:58Z — scientia-wiki-ingest — created — summaries/c4model-com-home.md — from raw/c4model-com-home.md
+- 2026-05-26T18:57:58Z — scientia-wiki-ingest — created — concepts/c4-abstractions.md — from raw/c4model-com-home.md
+- 2026-05-26T18:57:58Z — scientia-wiki-ingest — updated — concepts/c4-model.md — from raw/c4model-com-home.md
+- 2026-05-26T18:57:58Z — scientia-wiki-ingest — created — entities/simon-brown.md — from raw/c4model-com-home.md
+- 2026-05-26T18:57:58Z — scientia-wiki-ingest — updated — index.md — from raw/c4model-com-home.md

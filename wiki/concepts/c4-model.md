@@ -3,8 +3,8 @@ title: "C4 Model"
 type: concept
 tags: [concept, architecture, diagramming, documentation]
 created: 2026-05-23
-updated: 2026-05-23
-sources: ["raw/intent-driven-template/skills.md"]
+updated: 2026-05-26
+sources: ["raw/intent-driven-template/skills.md", "raw/c4model-com-home.md"]
 confidence: high
 ---
 
@@ -19,6 +19,15 @@ value rather than exhaustively documenting a system. The
 [[entities/intent-driven-template]] ships a `c4-diagrams` skill that produces
 C4-style diagrams in ASCII or plain Mermaid to clarify architecture before
 detailed design.
+
+Per its creator [[entities/simon-brown|Simon Brown]] (c4model.com), C4 is an
+**"abstraction-first"** approach: the diagram levels are simply views over a
+small set of [[concepts/c4-abstractions|C4 abstractions]] (person, software
+system, container, component, code) that mirror how teams build software. The
+model is deliberately **notation independent** (not tied to UML, ArchiMate,
+etc.) and **tooling independent** (a whiteboard works as well as
+diagramming-as-code), and frames the diagrams as *maps of your code* at varying
+levels of zoom.
 
 ## How It Works
 
@@ -72,12 +81,16 @@ containers.
   first.
 - **C4-specific Mermaid syntax** — hurts portability; use plain `flowchart` /
   `sequenceDiagram`.
-- **Treating modules as containers** — conflates levels and misleads readers.
+- **Treating modules as containers** — conflates levels and misleads readers;
+  modules are almost always *components*. Likewise, a C4 **container is not a
+  Docker container** — it is any separately runnable/deployable application or
+  data store (see [[concepts/c4-abstractions]]).
 - **Hiding uncertainty** — omitting assumptions/open questions makes a speculative
   diagram look authoritative.
 
 ## Related Concepts
 
+- [[concepts/c4-abstractions]] — the person/system/container/component/code vocabulary the diagram levels view
 - [[concepts/separation-of-concerns]] — the boundaries C4 makes visible
 - [[concepts/loose-coupling]] — a property the dependency edges expose
 - [[concepts/abstraction]] — C4 levels are layered abstractions of one system
@@ -87,3 +100,4 @@ containers.
 ## Sources
 
 - [c4-diagrams skill](https://github.com/intent-driven-dev/intent-driven-template/tree/main/.agents/skills/c4-diagrams) (`raw/intent-driven-template/skills.md`)
+- [c4model.com](https://c4model.com/) — the official C4 model site by [[entities/simon-brown|Simon Brown]] (`raw/c4model-com-home.md`)
