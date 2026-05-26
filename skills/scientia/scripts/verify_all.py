@@ -31,6 +31,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -39,6 +40,19 @@ from pathlib import Path
 from typing import Iterable
 
 SEVERITIES = ["suggestion", "warning", "critical"]
+
+# Job-hunt status enum + legal transition graph — kept in sync with
+# skills/scientia-jobhunt-ingest/references/STATUS_ENUM.md.
+JOBHUNT_STATUSES = {"draft", "applied", "screening", "interviewing", "offer",
+                    "accepted", "rejected", "withdrawn"}
+JOBHUNT_LEGAL = {
+    "draft":        {"applied", "withdrawn"},
+    "applied":      {"screening", "interviewing", "offer", "rejected", "withdrawn"},
+    "screening":    {"interviewing", "offer", "rejected", "withdrawn"},
+    "interviewing": {"offer", "rejected", "withdrawn"},
+    "offer":        {"accepted", "rejected", "withdrawn"},
+    "accepted":     set(), "rejected": set(), "withdrawn": set(),
+}
 
 
 @dataclass
@@ -444,6 +458,135 @@ def gate_schema_version(report: Report, repo: Path) -> None:
                    f"repo schema v{repo_v} > bundle schema v{bundle_v}; upgrade the scientia bundle")
 
 
+# ---------------------------------------------------------------------------
+# Job-hunt sub-loop gate (optional — no-op unless the feature is configured)
+# ---------------------------------------------------------------------------
+
+
+def _jobhunt_feature_on(repo: Path) -> bool:
+    if (repo / "development" / "job-hunt").is_dir():
+        return True
+    cfg = repo / "development" / "config.yaml"
+    if cfg.exists():
+        for line in cfg.read_text(encoding="utf-8", errors="ignore").splitlines():
+            if re.match(r"^jobhunt:\s*(#.*)?$", line):
+                return True
+    return False
+
+
+def _jobhunt_frontmatter(text: str) -> dict:
+    m = re.match(r"^---\n(.*?)\n---", text, re.DOTALL)
+    if not m:
+        return {}
+    fm = {}
+    for line in m.group(1).splitlines():
+        if ":" in line and not line.startswith((" ", "\t")):
+            k, _, v = line.partition(":")
+            fm[k.strip()] = v.strip().strip('"').strip("'")
+    return fm
+
+
+def _jobhunt_transitions(text: str):
+    """Yield (from, to) for each line in the ## Status History section."""
+    sec = re.search(r"^##\s+Status History\s*\n(.*?)(?=^##\s|\Z)",
+                    text, re.MULTILINE | re.DOTALL)
+    if not sec:
+        return
+    for line in sec.group(1).splitlines():
+        m = re.match(r"-\s*\S+\s*—\s*(.+?)\s*→\s*(.+?)\s*—", line.strip())
+        if m:
+            yield m.group(1).strip().strip("()"), m.group(2).strip()
+
+
+def gate_jobhunt(report: Report, repo: Path) -> None:
+    """Validate the optional job-hunt sub-loop. No-op unless configured."""
+    if not _jobhunt_feature_on(repo):
+        return
+    jh = repo / "wiki" / "jobhunt"
+    apps = []  # (slug, frontmatter, campaign)
+    if jh.is_dir():
+        for md in sorted(jh.rglob("*.md")):
+            rel = md.relative_to(repo)
+            text = md.read_text(encoding="utf-8", errors="ignore")
+            if not text.lstrip().startswith("---"):
+                report.add("jobhunt", "critical",
+                           f"{rel} missing YAML frontmatter", tenant="jobhunt")
+                continue
+            fm = _jobhunt_frontmatter(text)
+            if fm.get("type") != "jobhunt-application":
+                continue
+            campaign = fm.get("campaign_id")
+            slug = md.stem
+            apps.append((slug, fm, campaign))
+            # (1) status enum
+            status = fm.get("status")
+            if status not in JOBHUNT_STATUSES:
+                report.add("jobhunt", "critical",
+                           f"{rel}: status {status!r} not in the job-hunt enum",
+                           tenant="jobhunt", change_id=campaign)
+            # (5) illegal transitions
+            for frm, to in _jobhunt_transitions(text):
+                if frm != "none" and to not in JOBHUNT_LEGAL.get(frm, set()):
+                    report.add("jobhunt", "critical",
+                               f"{rel}: illegal status transition {frm} → {to} "
+                               "(see STATUS_ENUM.md)",
+                               tenant="jobhunt", change_id=campaign)
+            # (3) orphan checks
+            posting = fm.get("posting", "")
+            lm = re.search(r"\[\[([^\]|]+)", posting)
+            if lm:
+                target = repo / "wiki" / (lm.group(1) + ".md")
+                if not target.exists():
+                    report.add("jobhunt", "warning",
+                               f"{rel}: posting link [[{lm.group(1)}]] does not resolve",
+                               tenant="jobhunt", change_id=campaign)
+            if not fm.get("kanban_task_id"):
+                report.add("jobhunt", "warning",
+                           f"{rel}: no kanban_task_id recorded (orphan application?)",
+                           tenant="jobhunt", change_id=campaign)
+
+    # (4) human gate not bypassed: each `applied` application needs a logged
+    # `jobhunt-submit-approved` line naming it.
+    log = repo / "development" / "log.md"
+    log_text = log.read_text(encoding="utf-8", errors="ignore") if log.exists() else ""
+    for slug, fm, campaign in apps:
+        if fm.get("status") == "applied":
+            approved = any(
+                "jobhunt-submit-approved" in ln and f"app={slug}" in ln
+                for ln in log_text.splitlines())
+            if not approved:
+                report.add("jobhunt", "critical",
+                           f"application {slug} is `applied` but has no logged "
+                           "`jobhunt-submit-approved — app=<slug>` entry — the "
+                           "human submit gate may have been bypassed",
+                           tenant="jobhunt", change_id=campaign)
+
+    # (2) index ↔ wiki consistency (WARNING) via rebuild_index.py --check.
+    rebuild = (Path(__file__).resolve().parents[3] / "skills"
+               / "scientia-jobhunt-index" / "scripts" / "rebuild_index.py")
+    if rebuild.is_file():
+        fmt = "sqlite"
+        cfg = repo / "development" / "config.yaml"
+        if cfg.exists():
+            fm_match = re.search(r"^\s*format:\s*(sqlite|yaml)\s*$",
+                                 cfg.read_text(encoding="utf-8", errors="ignore"),
+                                 re.MULTILINE)
+            if fm_match:
+                fmt = fm_match.group(1)
+        try:
+            r = subprocess.run(
+                ["python3", str(rebuild), "--repo-root", str(repo),
+                 "--format", fmt, "--check"],
+                capture_output=True, text=True, check=False, timeout=30)
+            if r.returncode == 1:
+                report.add("jobhunt", "warning",
+                           "pipeline index is stale relative to wiki/jobhunt/ — "
+                           "re-run scientia-jobhunt-index", tenant="jobhunt")
+        except Exception as exc:  # noqa: BLE001
+            report.add("jobhunt", "suggestion",
+                       f"could not check pipeline index: {exc}", tenant="jobhunt")
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--repo", default=os.getcwd())
@@ -462,6 +605,7 @@ def main() -> int:
     gate_idempotency_drift(report, repo)
     gate_blocked_sweep(report, repo)
     gate_trunk_fmt_drift(report, repo)
+    gate_jobhunt(report, repo)
 
     threshold = read_threshold(repo, args.threshold)
     worst = report.worst()

@@ -24,6 +24,18 @@ from typing import Any, Callable, Dict, Iterable, List, Optional, Set, Tuple
 # happens via `hermes.profile_names` (see _resolve_profile_name).
 ROLES = frozenset({"implementer", "reviewer", "integrator", "aggregator"})
 
+# Optional job-hunt sub-loop role. A single browser-automation profile,
+# allowed under `hermes.profiles:` only when the jobhunt feature is enabled.
+# It is deliberately NOT part of ROLES: the mainline emit's
+# profile-existence gate (check_profiles_exist) must keep iterating only the
+# four P2 roles, so a non-jobhunt repo is never asked for this profile.
+JOBHUNT_ROLE = "jobhunt"
+JOBHUNT_PROFILE_DEFAULT = "scientia-jobhunt-agent"
+
+# Roles accepted in the `hermes.profiles:` config block (validation +
+# name resolution + drift). Superset of ROLES by the optional jobhunt role.
+ALLOWED_ROLES = ROLES | {JOBHUNT_ROLE}
+
 # Per-role top-level keys, mirroring Hermes' per-profile config.yaml.
 ROLE_TOP_KEYS = frozenset({"model", "auxiliary", "model_aliases", "agent"})
 
@@ -86,10 +98,10 @@ def validate_profiles(profiles_block: Optional[dict]) -> Dict[str, dict]:
         )
 
     for role, block in profiles_block.items():
-        if role not in ROLES:
+        if role not in ALLOWED_ROLES:
             raise ProfileConfigError(
                 f"hermes.profiles: unknown role {role!r}; "
-                f"expected one of {sorted(ROLES)}"
+                f"expected one of {sorted(ALLOWED_ROLES)}"
             )
         if block is None:
             continue
@@ -242,16 +254,18 @@ def _stringify(value) -> str:
 def resolve_profile_name(role: str, profile_names: Optional[dict]) -> str:
     """Look up the Hermes profile name for a scientia role.
 
-    Defaults to `scientia-<role>` when not overridden. Mirrors the
-    convention shipped in development/config.yaml.tmpl's
-    `hermes.profile_names` block.
+    Defaults to `scientia-<role>` when not overridden (the jobhunt role
+    defaults to `scientia-jobhunt-agent`). Mirrors the convention shipped
+    in development/config.yaml.tmpl's `hermes.profile_names` block.
     """
-    if role not in ROLES:
+    if role not in ALLOWED_ROLES:
         raise ProfileConfigError(
             f"resolve_profile_name: unknown role {role!r}"
         )
     if profile_names and role in profile_names and profile_names[role]:
         return str(profile_names[role])
+    if role == JOBHUNT_ROLE:
+        return JOBHUNT_PROFILE_DEFAULT
     return f"scientia-{role}"
 
 

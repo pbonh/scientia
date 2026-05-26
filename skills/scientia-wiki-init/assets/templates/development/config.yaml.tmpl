@@ -122,3 +122,41 @@ ingest:
 tenants: {}
 #   billing:
 #     require_approval: true
+
+# Optional job-hunt browser-automation sub-loop. ABSENT = feature OFF
+# (no new profile, no new skills activated, zero change to the mainline
+# pipeline). Uncomment to enable, then re-run scientia-kanban-init to create
+# the scientia-jobhunt-agent profile and turn on its browser toolset.
+# NOTE: keep comments on their own lines — do NOT add trailing `# ...`
+# comments to value lines below (the config reader keeps them as part of
+# the value).
+# jobhunt:
+#   # The user-profile page the brief reads (or pass --profile / keep one
+#   # page under wiki/jobhunt/profile/).
+#   user_profile_page: wiki/jobhunt/profile/me.md
+#   browser:
+#     # provider: one of cdp | camofox | browserbase | browser_use | firecrawl.
+#     # cdp (default) attaches to your already-logged-in Chrome — best for
+#     # authenticated job portals, no cloud keys. Launch Chrome first:
+#     #   google-chrome --remote-debugging-port=9222 \
+#     #     --user-data-dir="$HOME/.cache/jobhunt-chrome"
+#     provider: cdp
+#     cdp_endpoint: http://127.0.0.1:9222
+#     # For cloud providers instead, drop cdp_endpoint and set key_env to the
+#     # env var holding the API key (checked by the init/emit preflight):
+#     # key_env: BROWSERBASE_API_KEY
+#   index:
+#     # format: sqlite | yaml
+#     format: sqlite
+#
+# Optional per-profile model config for the jobhunt browser agent. Applied by
+# scientia-kanban-init exactly like the other roles; the `jobhunt` role
+# resolves to the scientia-jobhunt-agent profile.
+# hermes:
+#   profiles:
+#     jobhunt:
+#       model:
+#         provider: anthropic
+#         default: claude-opus-4.7
+#       agent:
+#         max_turns: 150

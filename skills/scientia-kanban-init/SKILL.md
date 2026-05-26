@@ -1,6 +1,6 @@
 ---
 name: scientia-kanban-init
-description: One-shot Hermes Kanban bootstrap for the host. Creates the four scientia agent profile directories via `hermes profile create`, writes their SOUL.md bodies from this skill's assets/profiles/, applies per-profile model configuration declared under `hermes.profiles` in development/config.yaml (propagating any referenced host `custom_providers` entries into each profile's own config.yaml so workers can resolve `custom:<name>`), runs an API-key reachability preflight that refuses init when a declared `custom:<name>` provider's `key_env` is absent from process env, host `.env`, and the profile's own `.env`, symlinks the scientia skills (kanban-worker, grill, …) into both `~/.hermes/skills/` (for emit-time `--skill` validation) and each `~/.hermes/profiles/<name>/skills/` (for worker-time skill loading; required — workers crash on spawn without it), verifies the hermes CLI is on PATH and the kanban.db path declared in development/config.yaml is writable, propagates the per-repo `hermes.max_concurrent_children` cap to *both* `~/.hermes/config.yaml` and each scientia profile's `delegation.max_concurrent_children` (so sub-delegations from a worker honour the same cap), and confirms the Hermes gateway is up. Run once per host (not per repo) on first scientia use, or whenever the user says "initialize Hermes". Idempotent — never overwrites a hand-edited SOUL.md or pre-existing skill symlink; per-profile model config is authoritative and re-applied to converge; profile configs that already declare `custom_providers:` are left alone.
+description: One-shot Hermes Kanban bootstrap for the host. Creates the four scientia agent profile directories via `hermes profile create` (plus an optional fifth `scientia-jobhunt-agent` browser profile, with its browser toolset enabled and provider reachability preflighted, when development/config.yaml declares a `jobhunt:` block), writes their SOUL.md bodies from this skill's assets/profiles/, applies per-profile model configuration declared under `hermes.profiles` in development/config.yaml (propagating any referenced host `custom_providers` entries into each profile's own config.yaml so workers can resolve `custom:<name>`), runs an API-key reachability preflight that refuses init when a declared `custom:<name>` provider's `key_env` is absent from process env, host `.env`, and the profile's own `.env`, symlinks the scientia skills (kanban-worker, grill, …) into both `~/.hermes/skills/` (for emit-time `--skill` validation) and each `~/.hermes/profiles/<name>/skills/` (for worker-time skill loading; required — workers crash on spawn without it), verifies the hermes CLI is on PATH and the kanban.db path declared in development/config.yaml is writable, propagates the per-repo `hermes.max_concurrent_children` cap to *both* `~/.hermes/config.yaml` and each scientia profile's `delegation.max_concurrent_children` (so sub-delegations from a worker honour the same cap), and confirms the Hermes gateway is up. Run once per host (not per repo) on first scientia use, or whenever the user says "initialize Hermes". Idempotent — never overwrites a hand-edited SOUL.md or pre-existing skill symlink; per-profile model config is authoritative and re-applied to converge; profile configs that already declare `custom_providers:` are left alone.
 license: MIT
 metadata:
   bundle: scientia
@@ -148,6 +148,84 @@ Make this host ready to run the scientia kanban phase.
    Keyless custom providers (no `key_env` in the host entry) are
    skipped. Built-in providers (`anthropic`, `openrouter`, …) handle
    their own key resolution and are not part of this gate.
+
+3d. **Optional — the job-hunt browser profile.** Run this step **only**
+   when `development/config.yaml` contains a `jobhunt:` block (the
+   optional job-hunt browser-automation sub-loop). When the block is
+   absent, skip entirely — nothing here runs and existing repos are
+   unaffected.
+
+   When present:
+
+   - **Create the fifth profile** the same way as the four above:
+
+     ```bash
+     name=scientia-jobhunt-agent
+     if ! hermes profile show "$name" >/dev/null 2>&1; then
+       hermes profile create "$name" --no-alias
+     fi
+     cp "$ASSETS/profiles/$name.md" ~/.hermes/profiles/"$name"/SOUL.md
+     ```
+
+     Same sha256 idempotency guard as step 3 — never overwrite a
+     hand-edited `SOUL.md`. The profile name honours
+     `hermes.profile_names.jobhunt` if the user overrode it.
+
+   - **Symlink the scientia skills** into the profile-local tree (step 4
+     also covers this if you add `scientia-jobhunt-agent` to its profile
+     loop; doing it here keeps the optional path self-contained):
+
+     ```bash
+     PROFILE_SKILLS=~/.hermes/profiles/scientia-jobhunt-agent/skills
+     mkdir -p "$PROFILE_SKILLS"
+     for skill in "$BUNDLE_ROOT"/skills/scientia-*; do
+       name=$(basename "$skill")
+       [ -e "$PROFILE_SKILLS/$name" ] || ln -s "$skill" "$PROFILE_SKILLS/$name"
+     done
+     ```
+
+   - **Enable the browser toolset** (idempotent):
+
+     ```bash
+     python3 "$BUNDLE_ROOT/skills/scientia-kanban-init/scripts/apply_browser_toolset.py" \
+       --repo-root "$REPO_ROOT"
+     ```
+
+     This appends `browser` to the profile's `toolsets`. If Hermes
+     rejects the write, the script refuses and prints the manual
+     fallback (`hermes setup tools` → Browser Automation, then confirm
+     with `hermes -p scientia-jobhunt-agent config show --json`). Which
+     browser backend and its credentials (a logged-in Chrome over CDP, a
+     Browserbase key, a Camofox URL) are yours to configure via
+     `hermes setup tools` / `~/.hermes/.env` — scientia only ensures the
+     toolset is on.
+
+   - **Preflight the provider reachability** (refuse init on failure):
+
+     ```bash
+     python3 "$BUNDLE_ROOT/skills/scientia-kanban-init/scripts/check_browser_provider.py" \
+       --repo-root "$REPO_ROOT"
+     ```
+
+     For `provider: cdp` this checks the `cdp_endpoint` answers (launch
+     Chrome with `--remote-debugging-port=9222` first). For
+     `camofox`/`browserbase`/etc. it checks the provider's API-key env
+     var is reachable, mirroring step 3c.
+
+   - **Model config** for the jobhunt profile is applied automatically by
+     step 3b's `apply_profile_models.py` when `hermes.profiles.jobhunt`
+     is declared (the `jobhunt` role resolves to `scientia-jobhunt-agent`).
+
+   - **Smoke-test** that the profile resolves its worker skill:
+
+     ```bash
+     hermes -p scientia-jobhunt-agent skills list --source local \
+       | grep -q scientia-jobhunt-worker \
+       || { echo "jobhunt profile cannot resolve scientia-jobhunt-worker" >&2; exit 1; }
+     ```
+
+   Append `- <ISO-Z> — scientia-kanban-init — jobhunt-profile-ready — — profile=scientia-jobhunt-agent`
+   to `development/log.md` on success.
 
 4. **Install the scientia skills — both host-globally and per-profile.**
    Hermes resolves skill names in two independent places:

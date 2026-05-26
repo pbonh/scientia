@@ -171,6 +171,13 @@ Common cases:
 | User says "verify" | `scripts/verify_all.py` (CI-style report) |
 | User says "grill me" | `scientia-grill` |
 
+If `state_detect.py` reports a `jobhunt` key (the optional job-hunt
+browser-automation sub-loop), also consult the **Job-Hunt appendix** in
+[references/SKILL_MAP.md](references/SKILL_MAP.md). When the key is absent,
+ignore it — the feature is off and nothing about the mainline pipeline
+changes. Log job-hunt transitions to `development/log.md` as
+`— orchestrator — jobhunt-<event> —`.
+
 ## Gates
 
 Refuse to advance and surface the conflict if:

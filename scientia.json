@@ -32,13 +32,19 @@
     "scientia-kanban-archive",
     "scientia-ingest-evidence",
     "scientia-ingest-synthesize",
-    "scientia-ingest-archive"
+    "scientia-ingest-archive",
+    "scientia-jobhunt-brief",
+    "scientia-jobhunt-emit",
+    "scientia-jobhunt-worker",
+    "scientia-jobhunt-ingest",
+    "scientia-jobhunt-index"
   ],
   "profiles": [
     "scientia-implementer",
     "scientia-reviewer",
     "scientia-integrator",
-    "scientia-aggregator"
+    "scientia-aggregator",
+    "scientia-jobhunt-agent"
   ],
   "default_target_layout": {
     "raw": "raw/",

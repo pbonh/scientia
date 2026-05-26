@@ -88,7 +88,7 @@ def detect_repo(root: Path) -> dict:
 
     lint_status = scan_lint_status(root)
 
-    return {
+    state = {
         "wiki_present": wiki_present,
         "openspec_present": openspec_present,
         "development_present": development_present,
@@ -98,6 +98,14 @@ def detect_repo(root: Path) -> dict:
         "tenants": tenants,
         "lint_status": lint_status,
     }
+
+    # Optional job-hunt sub-loop. Absent artifacts => no `jobhunt` key =>
+    # zero behavioural change for repos that never enabled the feature.
+    jobhunt = detect_jobhunt(root)
+    if jobhunt is not None:
+        state["jobhunt"] = jobhunt
+
+    return state
 
 
 def read_schema_version(config_path: Path) -> int | None:
@@ -135,6 +143,12 @@ def scan_tenants(repo_root: Path) -> dict:
         if not tenant_dir.is_dir():
             continue
         tenant = tenant_dir.name
+        # `jobhunt` is the dedicated tenant of the optional browser sub-loop;
+        # it has no OpenSpec manifest and must never register as a pipeline
+        # tenant (which would make the orchestrator offer intent stages for
+        # it). Guard defensively in case a stray dir appears here.
+        if tenant == "jobhunt":
+            continue
         # The single active change for a tenant is the most recently created subdir.
         changes = sorted([d for d in tenant_dir.iterdir() if d.is_dir()])
         if not changes:
@@ -403,6 +417,109 @@ def scan_lint_status(repo_root: Path) -> str:
             return "warning"
         return "clean"
     return "clean"
+
+
+# ---------------------------------------------------------------------------
+# Optional job-hunt sub-loop detection
+# ---------------------------------------------------------------------------
+
+
+def _jobhunt_enabled(root: Path) -> bool:
+    """True when development/config.yaml has an uncommented top-level
+    `jobhunt:` key."""
+    cfg = root / "development" / "config.yaml"
+    if not cfg.exists():
+        return False
+    try:
+        for line in cfg.read_text(encoding="utf-8").splitlines():
+            if re.match(r"^jobhunt:\s*(#.*)?$", line):
+                return True
+    except Exception:
+        return False
+    return False
+
+
+def _jobhunt_kanban(root: Path) -> tuple[str, int]:
+    """Return (kanban_status, gated_count) for the `jobhunt` tenant.
+
+    gated_count is the number of blocked tasks (proxy for form-fills parked
+    awaiting human submit approval). Returns ("none", 0) without Hermes.
+    """
+    if shutil.which("hermes") is None:
+        return "none", 0
+    try:
+        result = subprocess.run(
+            ["hermes", "kanban", "list", "--tenant", "jobhunt", "--json"],
+            capture_output=True, text=True, check=False, timeout=10,
+        )
+        if result.returncode != 0:
+            return "none", 0
+        rows = json.loads(result.stdout or "[]")
+    except Exception:
+        return "none", 0
+    if not rows:
+        return "none", 0
+    statuses = {r.get("status") for r in rows}
+    gated = sum(1 for r in rows if r.get("status") == "blocked")
+    if "running" in statuses:
+        kstat = "running"
+    elif "blocked" in statuses:
+        kstat = "blocked"
+    elif statuses <= {"done", "archived"}:
+        kstat = "done"
+    else:
+        kstat = "mixed"
+    return kstat, gated
+
+
+def detect_jobhunt(root: Path) -> dict | None:
+    """Detect the optional job-hunt sub-loop's state.
+
+    Returns None when no job-hunt artifacts exist (so the emitted JSON has
+    no `jobhunt` key and existing repos are unaffected). When present,
+    returns {enabled, active_campaign, phase, kanban_status, gated_count}
+    where phase ∈ none|briefed|emitted|running|gated|ingested.
+    """
+    jh_dev = root / "development" / "job-hunt"
+    jh_wiki = root / "wiki" / "jobhunt"
+    if not jh_dev.is_dir() and not jh_wiki.is_dir():
+        return None
+
+    briefs = jh_dev / "briefs"
+    campaigns = sorted(d.name for d in briefs.iterdir() if d.is_dir()) \
+        if briefs.is_dir() else []
+    active = campaigns[-1] if campaigns else None
+
+    tasks_root = jh_dev / "tasks"
+    emitted = bool(active) and (tasks_root / active).is_dir() \
+        and any((tasks_root / active).glob("*.md"))
+
+    apps = jh_wiki / "applications"
+    has_apps = apps.is_dir() and any(apps.glob("*.md"))
+
+    kstat, gated = _jobhunt_kanban(root)
+
+    # Surface the most actionable state first: a parked gate needs a human.
+    if gated > 0 or kstat == "blocked":
+        phase = "gated"
+    elif kstat == "running":
+        phase = "running"
+    elif has_apps:
+        phase = "ingested"
+    elif emitted:
+        phase = "emitted"
+    elif active:
+        phase = "briefed"
+    else:
+        phase = "none"
+
+    return {
+        "enabled": _jobhunt_enabled(root),
+        "active_campaign": active,
+        "phase": phase,
+        "kanban_status": kstat,
+        "gated_count": gated,
+    }
 
 
 def main() -> int:

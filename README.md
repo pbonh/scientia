@@ -25,11 +25,15 @@ dependencies are [OpenSpec](https://github.com/intent-driven-dev/openspec) and
 | **Intent (per OpenSpec stage)** | `scientia-intent-proposal`, `scientia-intent-spec`, `scientia-intent-design`, `scientia-intent-adr`, `scientia-intent-tasks`, `scientia-intent-verify` |
 | **Hermes Kanban execution** | `scientia-kanban-init`, `scientia-kanban-emit`, `scientia-kanban-worker`, `scientia-kanban-status`, `scientia-kanban-archive` |
 | **Ingest (closing the loop)** | `scientia-ingest-evidence`, `scientia-ingest-synthesize`, `scientia-ingest-archive` |
+| **Job-hunt (optional sub-loop)** | `scientia-jobhunt-brief`, `scientia-jobhunt-emit`, `scientia-jobhunt-worker`, `scientia-jobhunt-ingest`, `scientia-jobhunt-index` |
 
-22 skills total. Plus 4 Hermes profiles
+27 skills total. Plus 5 Hermes profiles
 (`scientia-implementer`, `scientia-reviewer`, `scientia-integrator`,
-`scientia-aggregator`) installed into `~/.hermes/profiles/` by
-`scientia-kanban-init`.
+`scientia-aggregator`, and the optional `scientia-jobhunt-agent`)
+installed into `~/.hermes/profiles/` by `scientia-kanban-init`. The five
+`scientia-jobhunt-*` skills and the `scientia-jobhunt-agent` profile are
+**optional** — they activate only when `development/config.yaml` declares a
+`jobhunt:` block (see [Job-hunt browser automation](#job-hunt-browser-automation-optional)).
 
 ## Pipeline at a glance
 
@@ -139,6 +143,52 @@ You manage the host `custom_providers:` definitions and per-profile
 `.env` files (for API keys); scientia takes care of the propagation.
 Built-in providers (`anthropic`, `openrouter`, `xai`, etc.) need no
 propagation and can be declared per-profile as-is.
+
+## Job-hunt browser automation (optional)
+
+An optional sub-loop hangs off the wiki phase and drives a browser via
+[Hermes' browser feature](https://hermes-agent.nousresearch.com/docs/user-guide/features/browser)
+to run a job search — find postings, author a résumé and cover letter from
+your wiki profile, pre-fill application forms, and submit **only after you
+approve**. It mirrors scientia's main closed loop but is shorter and skips
+OpenSpec entirely:
+
+```
+wiki/jobhunt/ ─► brief ─► emit (Hermes browser tasks) ─► capture ─► ingest ─► wiki/jobhunt/
+   (your profile + criteria)   (search · author · fill)   (human-gated submit)   (pipeline pages)
+                                                                                       │
+                                              development/job-hunt/pipeline.sqlite ◄────┘  (funnel analytics)
+```
+
+The job-hunt entities (companies, postings, applications, interviews,
+contacts) are **wiki pages** under `wiki/jobhunt/`; application status
+(`draft → applied → screening → interviewing → offer → accepted/rejected/
+withdrawn`) lives in page frontmatter. A derived
+`development/job-hunt/pipeline.sqlite` powers OB1-style analytics
+(conversion rate, stage funnel, upcoming interviews).
+
+**The human gate.** A form-fill worker fills the form completely,
+screenshots it, and **blocks** — it never clicks Submit. The submit is a
+separate kanban row parented to the form-fill, so the dispatcher cannot run
+it until you review the preview and promote it (logged as
+`jobhunt-submit-approved`). `verify_all.py`'s `gate_jobhunt` flags any
+`applied` application lacking that approval as CRITICAL.
+
+**Enable it.** Uncomment the `jobhunt:` block in
+`development/config.yaml`, then re-run `scientia-kanban-init` to create the
+`scientia-jobhunt-agent` profile and turn on its browser toolset. The
+default runtime is **CDP-attach to your already-logged-in Chrome** (launch
+it with `--remote-debugging-port=9222`) — best for authenticated portals
+and requires no cloud keys; Camofox/Browserbase are config-selectable.
+
+> **PII.** `wiki/jobhunt/` holds personal data (your contact details,
+> recruiter names). It is committed normally so the brief's wiki-snapshot
+> pin works — keep the repo on a **private remote**. Generated artifacts
+> (résumés, cover letters, form screenshots) live under
+> `development/job-hunt/` and are `.gitignore`'d; pages record only their
+> path + a content sha.
+
+Full walkthrough: [docs/04-jobhunt-browser-automation.md](docs/04-jobhunt-browser-automation.md).
 
 ## Versioning
 

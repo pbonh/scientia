@@ -22,9 +22,22 @@ skill. Read in conjunction with `scripts/state_detect.py`'s JSON output.
       "kanban_status": "none"             // none | running | blocked | done | mixed
     }
   },
-  "lint_status": "clean"                  // clean | warning | critical
+  "lint_status": "clean",                 // clean | warning | critical
+  "jobhunt": {                            // OPTIONAL — present only when the
+                                          // job-hunt sub-loop has artifacts
+    "enabled": true,                      // `jobhunt:` block in config.yaml
+    "active_campaign": "2026-05-25-rust",
+    "phase": "gated",                     // none|briefed|emitted|running|gated|ingested
+    "kanban_status": "blocked",           // none|running|blocked|done|mixed
+    "gated_count": 2                      // form-fills parked awaiting human submit
+  }
 }
 ```
+
+The `jobhunt` key is **absent** unless the optional job-hunt
+browser-automation sub-loop has on-disk artifacts (`development/job-hunt/`
+or `wiki/jobhunt/`). When absent, ignore the Job-Hunt appendix entirely —
+nothing about the mainline pipeline changes.
 
 `stage` enum (in order):
 
@@ -85,3 +98,24 @@ still warning"*):
 
 CRITICAL findings are not overridable through this protocol; require a
 fix or an explicit `--force` flag from a phase skill invocation.
+
+## Appendix: Job-Hunt sub-loop (optional)
+
+**Consult this table only when `state_detect.py` emits a `jobhunt` key.**
+The job-hunt browser-automation sub-loop is parallel to — never through —
+the OpenSpec intent phase; it has its own dedicated `jobhunt` Hermes tenant
+and never appears in `tenants`. Rows evaluated top-down, first match wins.
+
+| Condition (`jobhunt` key present) | Recommended next |
+|---|---|
+| `jobhunt.enabled == false` (artifacts exist but config has no `jobhunt:` block) | tell the user to uncomment `jobhunt:` and re-run `scientia-kanban-init` |
+| `jobhunt.phase == "none"` | **`scientia-jobhunt-brief`** (author `wiki/jobhunt/profile` + `criteria` first) |
+| `jobhunt.phase == "briefed"` | **`scientia-jobhunt-emit`** (search tasks) |
+| `jobhunt.phase == "emitted"` or `"running"` | **`scientia-kanban-status --tenant jobhunt`** (poll) |
+| `jobhunt.phase == "gated"` (`gated_count > 0`) | **human review** — open each blocked form-fill's `preview.png`, confirm, log `jobhunt-submit-approved`, then `hermes kanban unblock <form-fill-id>` to release the parented submit |
+| `jobhunt.phase == "ingested"` & jobhunt kanban `done` | **`scientia-jobhunt-ingest`** → **`scientia-jobhunt-index --report`**; then `scientia-jobhunt-emit --apply <slug>` for newly-found postings |
+
+The human gate is a hard stop: never `hermes kanban unblock` a form-fill
+without viewing its preview and appending a `jobhunt-submit-approved` line
+to `development/log.md`. `verify_all.py`'s `gate_jobhunt` flags any
+`applied` application lacking that approval as CRITICAL.
