@@ -61,3 +61,5 @@ Events include: `bootstrap-complete`, `manifest-bound`, `proposal-drafted`,
 - 2026-05-27T21:46:55Z — scientia-intent-adr — adrs-accepted — spec-driven-development/2026-05-26-kg-seeded-intent-skills — adr=ADR-0001..ADR-0010 status=accepted (bodies+shared_types frozen; ADR-0001 ratifies Page,Link)
 - 2026-05-27T21:51:07Z — scientia-intent-adr — adr-drafted — spec-driven-development/2026-05-26-kg-seeded-intent-skills — adr=ADR-0011 status=proposed (rollout/deprecation-sequencing; closes verify SUGGESTION)
 - 2026-05-27T21:51:07Z — scientia-intent-spec — spec-amended — spec-driven-development/2026-05-26-kg-seeded-intent-skills — capability=kg-confidence +1 scenario (ADR-0004 rollup-staleness-raise; closes verify WARNING)
+- 2026-05-27T21:53:54Z — scientia-intent-adr — adr-accepted — spec-driven-development/2026-05-26-kg-seeded-intent-skills — adr=ADR-0011 status=accepted
+- 2026-05-27T21:59:35Z — scientia-intent-tasks — tasks-listed — spec-driven-development/2026-05-26-kg-seeded-intent-skills — task_count=30

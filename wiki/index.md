@@ -415,7 +415,7 @@ entry here.
 | [[decisions/adr-0008]] | Render templates with str.format_map, no external engine | accepted | ASR-9 | 2026-05-27 |
 | [[decisions/adr-0009]] | Keep all wiki operations non-destructive | accepted | ASR-8 | 2026-05-27 |
 | [[decisions/adr-0010]] | Default durable-commitment stages to pause_and_ask | accepted | ASR-4 | 2026-05-27 |
-| [[decisions/adr-0011]] | Roll out the portable rewrite as an additive parallel path, deprecating phase-by-phase | proposed | ASR-1 | 2026-05-27 |
+| [[decisions/adr-0011]] | Roll out the portable rewrite as an additive parallel path, deprecating phase-by-phase | accepted | ASR-1 | 2026-05-27 |
 
 ## Specs
 

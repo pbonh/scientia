@@ -1,7 +1,7 @@
 ---
 title: "ADR-0011: Roll out the portable rewrite as an additive parallel path, deprecating phase-by-phase"
 adr_id: ADR-0011
-status: proposed
+status: accepted
 tenant: spec-driven-development
 change_id: 2026-05-26-kg-seeded-intent-skills
 supersedes: []
