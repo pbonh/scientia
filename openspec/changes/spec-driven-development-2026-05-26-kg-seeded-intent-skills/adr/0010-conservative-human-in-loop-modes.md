@@ -1,7 +1,7 @@
 ---
 title: "ADR-0010: Default durable-commitment stages to pause_and_ask"
 adr_id: ADR-0010
-status: proposed
+status: accepted
 tenant: spec-driven-development
 change_id: 2026-05-26-kg-seeded-intent-skills
 supersedes: []

@@ -1,7 +1,7 @@
 ---
 title: "ADR-0005: Lay out produced changes under a flat proposals/<change-id>/ tree"
 adr_id: ADR-0005
-status: proposed
+status: accepted
 tenant: spec-driven-development
 change_id: 2026-05-26-kg-seeded-intent-skills
 supersedes: []

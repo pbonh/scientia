@@ -86,7 +86,7 @@ for the design stage's C4 diagrams.
   kanban-execution and ingest-synthesis phases are deferred to a follow-up (no
   committed timeline), and deprecation/removal proceeds **phase-by-phase** as
   each portable replacement lands and passes its evals, never as a single
-  cutover.
+  cutover (recorded in ADR-0011).
 
 ## Out of Scope
 

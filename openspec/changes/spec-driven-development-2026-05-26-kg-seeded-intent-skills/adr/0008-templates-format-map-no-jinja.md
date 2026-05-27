@@ -1,7 +1,7 @@
 ---
 title: "ADR-0008: Render templates with str.format_map, no external engine"
 adr_id: ADR-0008
-status: proposed
+status: accepted
 tenant: spec-driven-development
 change_id: 2026-05-26-kg-seeded-intent-skills
 supersedes: []

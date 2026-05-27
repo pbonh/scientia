@@ -1,7 +1,7 @@
 ---
 title: "ADR-0006: Transfer pipeline state through on-disk artifacts only"
 adr_id: ADR-0006
-status: proposed
+status: accepted
 tenant: spec-driven-development
 change_id: 2026-05-26-kg-seeded-intent-skills
 supersedes: []

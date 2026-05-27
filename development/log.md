@@ -56,3 +56,8 @@ Events include: `bootstrap-complete`, `manifest-bound`, `proposal-drafted`,
 - 2026-05-27T21:09:57Z — scientia-intent-adr — adr-drafted — spec-driven-development/2026-05-26-kg-seeded-intent-skills — adr=ADR-0008 status=proposed
 - 2026-05-27T21:09:57Z — scientia-intent-adr — adr-drafted — spec-driven-development/2026-05-26-kg-seeded-intent-skills — adr=ADR-0009 status=proposed
 - 2026-05-27T21:09:57Z — scientia-intent-adr — adr-drafted — spec-driven-development/2026-05-26-kg-seeded-intent-skills — adr=ADR-0010 status=proposed
+- 2026-05-27T21:39:08Z — scientia-intent-adr — adr-mirrors-resynced — spec-driven-development/2026-05-26-kg-seeded-intent-skills — adrs=ADR-0003,ADR-0004,ADR-0006,ADR-0007,ADR-0010 reason=post-grill-edits index_asr=ADR-0006:ASR-3,ASR-5
+- 2026-05-27T21:45:42Z — scientia-intent-verify — verified — spec-driven-development/2026-05-26-kg-seeded-intent-skills — critical=1 warning=2 suggestion=3 note=tasks-stage-pending
+- 2026-05-27T21:46:55Z — scientia-intent-adr — adrs-accepted — spec-driven-development/2026-05-26-kg-seeded-intent-skills — adr=ADR-0001..ADR-0010 status=accepted (bodies+shared_types frozen; ADR-0001 ratifies Page,Link)
+- 2026-05-27T21:51:07Z — scientia-intent-adr — adr-drafted — spec-driven-development/2026-05-26-kg-seeded-intent-skills — adr=ADR-0011 status=proposed (rollout/deprecation-sequencing; closes verify SUGGESTION)
+- 2026-05-27T21:51:07Z — scientia-intent-spec — spec-amended — spec-driven-development/2026-05-26-kg-seeded-intent-skills — capability=kg-confidence +1 scenario (ADR-0004 rollup-staleness-raise; closes verify WARNING)

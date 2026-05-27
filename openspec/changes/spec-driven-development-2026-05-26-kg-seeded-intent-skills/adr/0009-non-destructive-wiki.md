@@ -1,7 +1,7 @@
 ---
 title: "ADR-0009: Keep all wiki operations non-destructive"
 adr_id: ADR-0009
-status: proposed
+status: accepted
 tenant: spec-driven-development
 change_id: 2026-05-26-kg-seeded-intent-skills
 supersedes: []

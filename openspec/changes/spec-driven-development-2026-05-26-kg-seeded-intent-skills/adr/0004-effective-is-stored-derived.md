@@ -1,7 +1,7 @@
 ---
 title: "ADR-0004: Store the effective score as a derived, recompute-owned value"
 adr_id: ADR-0004
-status: proposed
+status: accepted
 tenant: spec-driven-development
 change_id: 2026-05-26-kg-seeded-intent-skills
 supersedes: []

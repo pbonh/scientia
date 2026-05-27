@@ -1,7 +1,7 @@
 ---
 title: "ADR-0003: Model confidence per-claim and quantitatively"
 adr_id: ADR-0003
-status: proposed
+status: accepted
 tenant: spec-driven-development
 change_id: 2026-05-26-kg-seeded-intent-skills
 supersedes: []

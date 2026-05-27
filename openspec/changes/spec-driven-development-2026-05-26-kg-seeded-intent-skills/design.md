@@ -310,3 +310,9 @@ serves.
 - **`adr-conservative-human-in-loop-modes`** — Per-stage `autonomous` /
   `pause_and_ask` modes, with the stages nearest durable commitments
   (`write_design`, `record_adr`) defaulting to `pause_and_ask`. *(ASR-4)*
+- **`adr-additive-parallel-rollout`** — Ship the rewrite as an additive,
+  parallel authoring path with the existing bundle fully supported; total
+  replacement is the eventual goal sequenced authoring-first, with deprecation
+  proceeding phase-by-phase as each portable replacement passes its evals.
+  *(ASR-1)* (Recorded post-grill as ADR-0011; not in the original design
+  distillation.)

@@ -4,7 +4,7 @@ tenant: spec-driven-development
 change_id: 2026-05-26-kg-seeded-intent-skills
 capability: kg-confidence
 created: 2026-05-26
-updated: 2026-05-26
+updated: 2026-05-27
 ---
 
 # Capability: KG Confidence Model
@@ -35,6 +35,10 @@ operations are idempotent.
   `min(floor, base × multiplier)` if contradicted, else `base × multiplier`.
 - **Rollup** — page/edge confidence aggregated over claims; `min`
   (default), `mean`, or `max`.
+- **Freshness stamp (`inputs_hash`)** — a hash `recompute` writes over a
+  claim's `(base, distinct source count, contradiction state)`; a rollup
+  compares it against the claim's live inputs to detect a stale `effective`
+  (ADR-0004).
 
 ## Personas
 
@@ -54,6 +58,8 @@ operations are idempotent.
 - `recompute` is idempotent: a second recompute over unchanged inputs
   changes nothing.
 - Page rollup defaults to the minimum effective over the page's claims.
+- A rollup verifies each claim's `inputs_hash` and raises a staleness error
+  when a stored `effective` is stale, rather than returning a stale value.
 
 ## Scenarios
 
@@ -97,6 +103,13 @@ Then the returned value is 0.61
 Given a claim whose base score is 0.78
 When the Confidence Module recomputes the claim after a new source is added
 Then the claim's base score remains 0.78
+```
+
+### Scenario: A rollup raises rather than return a stale effective
+```gherkin
+Given a page whose claim's stored effective no longer matches its current inputs, leaving a stale inputs_hash
+When the Pipeline Author requests the page's rolled-up confidence
+Then the rollup raises a staleness error naming the stale claim instead of returning a value
 ```
 
 ## Kanban Tasks

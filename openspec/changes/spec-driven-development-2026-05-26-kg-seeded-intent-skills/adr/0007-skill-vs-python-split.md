@@ -1,7 +1,7 @@
 ---
 title: "ADR-0007: Split LLM judgment (skills) from deterministic logic (kg_pipeline)"
 adr_id: ADR-0007
-status: proposed
+status: accepted
 tenant: spec-driven-development
 change_id: 2026-05-26-kg-seeded-intent-skills
 supersedes: []
