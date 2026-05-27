@@ -405,6 +405,16 @@ entry here.
 | Page | Title | Status | ASR | Updated |
 |------|-------|--------|-----|---------|
 <!-- entries added by scientia-intent-adr (mirrors of openspec/changes/<id>/adr/) -->
+| [[decisions/adr-0001]] | Use the wiki as the sole KG representation | proposed | ASR-1, ASR-9 | 2026-05-27 |
+| [[decisions/adr-0002]] | Encode edge kind in the wiki-link alias slot | proposed | ASR-7 | 2026-05-27 |
+| [[decisions/adr-0003]] | Model confidence per-claim and quantitatively | proposed | ASR-4 | 2026-05-27 |
+| [[decisions/adr-0004]] | Store the effective score as a derived, recompute-owned value | proposed | ASR-2, ASR-4 | 2026-05-27 |
+| [[decisions/adr-0005]] | Lay out produced changes under a flat proposals/<change-id>/ tree | proposed | ASR-1 | 2026-05-27 |
+| [[decisions/adr-0006]] | Transfer pipeline state through on-disk artifacts only | proposed | ASR-3 | 2026-05-27 |
+| [[decisions/adr-0007]] | Split LLM judgment (skills) from deterministic logic (kg_pipeline) | proposed | ASR-2, ASR-5, ASR-6 | 2026-05-27 |
+| [[decisions/adr-0008]] | Render templates with str.format_map, no external engine | proposed | ASR-9 | 2026-05-27 |
+| [[decisions/adr-0009]] | Keep all wiki operations non-destructive | proposed | ASR-8 | 2026-05-27 |
+| [[decisions/adr-0010]] | Default durable-commitment stages to pause_and_ask | proposed | ASR-4 | 2026-05-27 |
 
 ## Specs
 
@@ -422,7 +432,7 @@ entry here.
 
 ## Statistics
 
-- **Total pages**: 296
+- **Total pages**: 306
 - **Sources ingested**: 24
 - **Bounded contexts**: 16
 - **Context maps**: 6

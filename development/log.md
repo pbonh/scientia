@@ -45,3 +45,14 @@ Events include: `bootstrap-complete`, `manifest-bound`, `proposal-drafted`,
 - 2026-05-26T21:35:04Z — scientia-intent-spec — spec-authored — spec-driven-development/2026-05-26-kg-seeded-intent-skills — capability=pipeline-orchestration scenarios=5
 - 2026-05-26T21:35:04Z — scientia-intent-spec — spec-authored — spec-driven-development/2026-05-26-kg-seeded-intent-skills — capability=pipeline-tooling scenarios=5
 - 2026-05-26T21:35:15Z — orchestrator — stage-transition — spec-driven-development/2026-05-26-kg-seeded-intent-skills — specs authored (8 capabilities, 41 scenarios); next: scientia-intent-design
+- 2026-05-27T21:02:05Z — scientia-intent-design — design-drafted — spec-driven-development/2026-05-26-kg-seeded-intent-skills — adrs_in_force=0 open_questions=4
+- 2026-05-27T21:09:57Z — scientia-intent-adr — adr-drafted — spec-driven-development/2026-05-26-kg-seeded-intent-skills — adr=ADR-0001 status=proposed
+- 2026-05-27T21:09:57Z — scientia-intent-adr — adr-drafted — spec-driven-development/2026-05-26-kg-seeded-intent-skills — adr=ADR-0002 status=proposed
+- 2026-05-27T21:09:57Z — scientia-intent-adr — adr-drafted — spec-driven-development/2026-05-26-kg-seeded-intent-skills — adr=ADR-0003 status=proposed
+- 2026-05-27T21:09:57Z — scientia-intent-adr — adr-drafted — spec-driven-development/2026-05-26-kg-seeded-intent-skills — adr=ADR-0004 status=proposed
+- 2026-05-27T21:09:57Z — scientia-intent-adr — adr-drafted — spec-driven-development/2026-05-26-kg-seeded-intent-skills — adr=ADR-0005 status=proposed
+- 2026-05-27T21:09:57Z — scientia-intent-adr — adr-drafted — spec-driven-development/2026-05-26-kg-seeded-intent-skills — adr=ADR-0006 status=proposed
+- 2026-05-27T21:09:57Z — scientia-intent-adr — adr-drafted — spec-driven-development/2026-05-26-kg-seeded-intent-skills — adr=ADR-0007 status=proposed
+- 2026-05-27T21:09:57Z — scientia-intent-adr — adr-drafted — spec-driven-development/2026-05-26-kg-seeded-intent-skills — adr=ADR-0008 status=proposed
+- 2026-05-27T21:09:57Z — scientia-intent-adr — adr-drafted — spec-driven-development/2026-05-26-kg-seeded-intent-skills — adr=ADR-0009 status=proposed
+- 2026-05-27T21:09:57Z — scientia-intent-adr — adr-drafted — spec-driven-development/2026-05-26-kg-seeded-intent-skills — adr=ADR-0010 status=proposed
