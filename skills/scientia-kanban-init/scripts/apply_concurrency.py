@@ -14,9 +14,10 @@ This script writes the declared cap to:
   1. `~/.hermes/config.yaml`             (host CLI invocations)
   2. each scientia profile's config.yaml (workers that sub-delegate)
 
-Idempotent: reads each target's effective value via
-`hermes [-p <name>] config show --json` and skips writes that already
-match. Per-target log lines go to `development/log.md`.
+Idempotent: reads each target's effective value from its on-disk config
+file (`~/.hermes/config.yaml` for the host, `~/.hermes/profiles/<name>/config.yaml`
+for a profile — Hermes removed `config show --json` in v0.14.0) and skips
+writes that already match. Per-target log lines go to `development/log.md`.
 
 Used by scientia-kanban-init step 6. Stdlib only.
 """
@@ -25,7 +26,6 @@ from __future__ import annotations
 
 import argparse
 import datetime as _dt
-import json
 import subprocess
 import sys
 from pathlib import Path
@@ -41,6 +41,8 @@ sys.path.insert(0, str(_EMIT_SCRIPTS))
 
 from profile_models import (  # noqa: E402
     ROLES,
+    read_hermes_config,
+    read_profile_config,
     resolve_profile_name,
 )
 from emit import _parse_yaml_subset  # noqa: E402
@@ -56,29 +58,16 @@ def read_effective_delegation_cap(
     profile: Optional[str] = None,
     runner: Callable = subprocess.run,
 ) -> Optional[int]:
-    """Read `delegation.max_concurrent_children` from host or profile.
+    """Read `delegation.max_concurrent_children` from host or profile config.
 
-    Returns the integer value when set, or None when the key is absent
-    from the effective config. Raises RuntimeError when the hermes call
-    itself fails.
+    Reads the on-disk config file directly (`~/.hermes/config.yaml` for the
+    host, `~/.hermes/profiles/<name>/config.yaml` for a profile) — Hermes
+    removed `config show --json` in v0.14.0. Returns the integer value when
+    set, or None when the key is absent. `runner` is accepted for call-site
+    compatibility but unused on the read path.
     """
-    argv = ["hermes"]
-    if profile:
-        argv += ["-p", profile]
-    argv += ["config", "show", "--json"]
-    proc = runner(argv, capture_output=True, text=True)
-    if proc.returncode != 0:
-        raise RuntimeError(
-            f"`{' '.join(argv)}` failed: "
-            f"{proc.stderr.strip() or 'no stderr'}"
-        )
-    try:
-        data = json.loads(proc.stdout)
-    except json.JSONDecodeError as e:
-        raise RuntimeError(
-            f"`{' '.join(argv)}` returned invalid JSON: {e}"
-        )
-    deleg = data.get("delegation") or {}
+    cfg = read_profile_config(profile) if profile else read_hermes_config()
+    deleg = cfg.get("delegation") or {}
     value = deleg.get("max_concurrent_children")
     if value is None:
         return None

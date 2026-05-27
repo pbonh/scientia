@@ -13,7 +13,6 @@ https://hermes-agent.nousresearch.com/docs/user-guide/configuring-models
 
 from __future__ import annotations
 
-import json
 import subprocess
 from pathlib import Path
 from typing import Any, Callable, Dict, Iterable, List, Optional, Set, Tuple
@@ -273,40 +272,196 @@ def _values_match(declared: str, effective: str) -> bool:
     return False
 
 
+# ---------------------------------------------------------------------------
+# Stdlib block-YAML reader
+#
+# Hermes' `config show` prints a human-readable dashboard in current releases
+# (the machine-readable `--json` flag was removed in v0.14.0), so scientia
+# reads the on-disk config files directly: `~/.hermes/config.yaml` for the
+# host and `~/.hermes/profiles/<name>/config.yaml` for each profile. The
+# parser below covers the subset Hermes writes — nested 2-space mappings,
+# block sequences (including a sequence at the same indent as its key, the
+# way `custom_providers:` is written), scalars, and inline `[a, b]` lists.
+# It is the read-side counterpart to the `_emit_*` YAML writer further down.
+# ---------------------------------------------------------------------------
+
+
+def _yaml_scalar(v: str) -> Any:
+    v = v.strip()
+    if len(v) >= 2 and (
+        (v[0] == '"' and v[-1] == '"') or (v[0] == "'" and v[-1] == "'")
+    ):
+        return v[1:-1]
+    if v in ("null", "~", ""):
+        return None
+    if v in ("true", "True"):
+        return True
+    if v in ("false", "False"):
+        return False
+    if v.startswith("[") and v.endswith("]"):
+        inner = v[1:-1].strip()
+        if not inner:
+            return []
+        return [_yaml_scalar(p) for p in inner.split(",")]
+    try:
+        return int(v)
+    except ValueError:
+        pass
+    try:
+        return float(v)
+    except ValueError:
+        pass
+    return v
+
+
+def _yaml_is_mapping_entry(s: str) -> bool:
+    """True when a (de-dashed) line opens a mapping key (`key:` / `key: v`)."""
+    return ": " in s or s.endswith(":")
+
+
+def _yaml_tokenize(text: str) -> List[list]:
+    """Split into `[indent, content]` for non-blank, non-comment lines."""
+    tokens: List[list] = []
+    for raw in text.splitlines():
+        s = raw.lstrip(" ")
+        if not s or s.startswith("#"):
+            continue
+        tokens.append([len(raw) - len(s), s])
+    return tokens
+
+
+def _yaml_parse_node(
+    tokens: List[list], i: int, indent: int
+) -> Tuple[Any, int]:
+    if i < len(tokens) and tokens[i][0] == indent and (
+        tokens[i][1] == "-" or tokens[i][1].startswith("- ")
+    ):
+        return _yaml_parse_sequence(tokens, i, indent)
+    return _yaml_parse_mapping(tokens, i, indent)
+
+
+def _yaml_parse_mapping(
+    tokens: List[list], i: int, indent: int
+) -> Tuple[dict, int]:
+    n = len(tokens)
+    out: dict = {}
+    while i < n:
+        ci, content = tokens[i]
+        if ci < indent:
+            break
+        if ci > indent:  # orphan deeper line (malformed) — skip defensively
+            i += 1
+            continue
+        if content.startswith("- ") or content == "-":
+            break
+        key, sep, val = content.partition(":")
+        if sep == "":
+            i += 1
+            continue
+        key = key.strip()
+        val = val.strip()
+        if val == "":
+            if i + 1 < n:
+                ni, nc = tokens[i + 1]
+                if (nc.startswith("- ") or nc == "-") and ni >= indent:
+                    child, i = _yaml_parse_sequence(tokens, i + 1, ni)
+                    out[key] = child
+                    continue
+                if ni > indent:
+                    child, i = _yaml_parse_node(tokens, i + 1, ni)
+                    out[key] = child
+                    continue
+            out[key] = None
+            i += 1
+            continue
+        out[key] = _yaml_scalar(val)
+        i += 1
+    return out, i
+
+
+def _yaml_parse_sequence(
+    tokens: List[list], i: int, indent: int
+) -> Tuple[list, int]:
+    n = len(tokens)
+    out: list = []
+    while i < n:
+        ci, content = tokens[i]
+        if ci != indent:
+            break
+        if not (content.startswith("- ") or content == "-"):
+            break
+        if content == "-":
+            if i + 1 < n and tokens[i + 1][0] > indent:
+                item, i = _yaml_parse_node(tokens, i + 1, tokens[i + 1][0])
+            else:
+                item, i = None, i + 1
+            out.append(item)
+            continue
+        rest = content[2:]
+        if _yaml_is_mapping_entry(rest):
+            # Re-anchor the item's first key at the dash's content column,
+            # then parse the remaining item lines as a mapping.
+            tokens[i] = [indent + 2, rest]
+            item, i = _yaml_parse_mapping(tokens, i, indent + 2)
+            out.append(item)
+        else:
+            out.append(_yaml_scalar(rest))
+            i += 1
+    return out, i
+
+
+def load_yaml(text: str) -> Any:
+    """Parse the YAML subset Hermes writes to its config files. Stdlib only."""
+    tokens = _yaml_tokenize(text)
+    if not tokens:
+        return {}
+    value, _ = _yaml_parse_node(tokens, 0, tokens[0][0])
+    return value
+
+
+def hermes_config_path() -> Path:
+    """Path to the host-level Hermes config (`~/.hermes/config.yaml`)."""
+    return Path.home() / ".hermes" / "config.yaml"
+
+
+def read_hermes_config(config_path: Optional[Path] = None) -> dict:
+    """Read + parse the host Hermes config. Returns {} when absent."""
+    path = config_path or hermes_config_path()
+    if not path.is_file():
+        return {}
+    data = load_yaml(path.read_text(encoding="utf-8"))
+    return data if isinstance(data, dict) else {}
+
+
+def read_profile_config(
+    profile_name: str, *, profiles_root: Optional[Path] = None
+) -> dict:
+    """Read + parse a profile's config.yaml. Returns {} when absent."""
+    path = profile_config_path(profile_name, profiles_root=profiles_root)
+    if not path.is_file():
+        return {}
+    data = load_yaml(path.read_text(encoding="utf-8"))
+    return data if isinstance(data, dict) else {}
+
+
 def read_effective_profile_config(
     profile_name: str,
     *,
     runner: Callable = subprocess.run,
+    profiles_root: Optional[Path] = None,
 ) -> Dict[str, str]:
-    """Read effective config for a Hermes profile as flat dotted-key map.
+    """Read effective config for a Hermes profile as a flat dotted-key map.
 
-    Calls `hermes -p <name> config show --json` and flattens the result.
-    Raises RuntimeError on non-zero exit, surfacing Hermes' stderr.
+    Reads `~/.hermes/profiles/<name>/config.yaml` directly and flattens it.
+    Hermes removed `config show --json` in v0.14.0; the on-disk profile
+    config carries every leaf scientia sets via `hermes config set`, so it
+    is authoritative for the keys the drift gate compares. Returns {} when
+    the profile has no config file yet. `runner` is accepted for call-site
+    compatibility but unused — this no longer shells out.
     """
-    proc = runner(
-        ["hermes", "-p", profile_name, "config", "show", "--json"],
-        capture_output=True,
-        text=True,
-    )
-    if proc.returncode != 0:
-        raise RuntimeError(
-            f"`hermes -p {profile_name} config show --json` failed: "
-            f"{proc.stderr.strip() or 'no stderr'}"
-        )
-    try:
-        data = json.loads(proc.stdout)
-    except json.JSONDecodeError as e:
-        raise RuntimeError(
-            f"`hermes -p {profile_name} config show --json` returned "
-            f"invalid JSON: {e}"
-        )
-    if not isinstance(data, dict):
-        raise RuntimeError(
-            f"`hermes -p {profile_name} config show --json` returned "
-            f"a non-object top-level value"
-        )
+    cfg = read_profile_config(profile_name, profiles_root=profiles_root)
     out: Dict[str, str] = {}
-    _flatten_into(data, prefix="", out=out)
+    _flatten_into(cfg, prefix="", out=out)
     return out
 
 
@@ -506,34 +661,20 @@ def collect_custom_provider_refs(role_block: dict) -> Set[str]:
 
 
 def read_host_custom_providers(
-    *, runner: Callable = subprocess.run,
+    *,
+    runner: Callable = subprocess.run,
+    config_path: Optional[Path] = None,
 ) -> List[dict]:
-    """Read the host-level `custom_providers` list via `hermes config show --json`.
+    """Read the host-level `custom_providers` list from `~/.hermes/config.yaml`.
 
-    Returns the list as parsed from JSON (each entry is a dict with at least
-    `name`, `base_url`; usually also `key_env`, `api_mode`, and `models`).
-    Returns [] when the host config has no `custom_providers`.
+    Returns the list as parsed from the on-disk host config (each entry a
+    dict with at least `name`, `base_url`; usually also `key_env`,
+    `api_mode`, and `models`). Returns [] when the host config has no
+    `custom_providers`. Hermes removed `config show --json` in v0.14.0, so
+    scientia reads the file directly. `runner` is accepted for call-site
+    compatibility but unused.
     """
-    proc = runner(
-        ["hermes", "config", "show", "--json"],
-        capture_output=True,
-        text=True,
-    )
-    if proc.returncode != 0:
-        raise RuntimeError(
-            "`hermes config show --json` failed: "
-            f"{proc.stderr.strip() or 'no stderr'}"
-        )
-    try:
-        data = json.loads(proc.stdout)
-    except json.JSONDecodeError as e:
-        raise RuntimeError(
-            f"`hermes config show --json` returned invalid JSON: {e}"
-        )
-    if not isinstance(data, dict):
-        raise RuntimeError(
-            "`hermes config show --json` returned a non-object top-level value"
-        )
+    data = read_hermes_config(config_path)
     providers = data.get("custom_providers") or []
     if not isinstance(providers, list):
         raise RuntimeError(
