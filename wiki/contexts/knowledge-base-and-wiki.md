@@ -3,7 +3,7 @@ title: "Knowledge Base & Wiki"
 type: context
 tags: [context, bounded-context, core]
 created: 2026-05-24
-updated: 2026-05-24
+updated: 2026-05-26
 confidence: high
 ---
 
@@ -81,6 +81,13 @@ commodity.
   [[contexts/knowledge-base-and-wiki]]'s neighbour
   [[contexts/shell-and-data-pipeline]] a query is a structured-data
   operation over tables.
+- **"confidence"** here is a *per-page, qualitative* metadata field
+  (`high`/`medium`/`low`). The in-flight KG-seeded rewrite
+  (`spec-driven-development/2026-05-26-kg-seeded-intent-skills`) defines
+  a *per-claim, quantitative* `[0,1]` model (base score × source-count
+  multiplier, clamped by a contradiction floor → `effective`) used to
+  gate automation. Same word, different mechanism; the quantitative
+  model applies only to wikis that rewrite produces, not this corpus.
 
 ## Sources
 

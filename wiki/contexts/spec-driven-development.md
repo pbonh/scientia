@@ -3,7 +3,7 @@ title: "Spec-Driven Development"
 type: context
 tags: [context, bounded-context, core]
 created: 2026-05-24
-updated: 2026-05-24
+updated: 2026-05-26
 confidence: high
 ---
 
@@ -86,6 +86,25 @@ execution. Differentiating, heavily invested.
 - **"design"** here names a pipeline stage (`design.md`); in
   [[contexts/software-design-principles]] *design* is the craft of
   structuring code. See [[concepts/c4-model]] which bridges them.
+
+## Open Questions / In-Flight Changes
+
+- **Change `spec-driven-development/2026-05-26-kg-seeded-intent-skills`**
+  (in flight) — a portable, *clean-room* rewrite of scientia as a
+  runtime-agnostic nine-`SKILL.md` set plus a `kg_pipeline` Python
+  package. Its novel contribution is seeding the intent phase's
+  `proposal` and `grill` stages directly from the wiki treated as a
+  knowledge graph. Resolved framing (from wiki-grill):
+  - The rewrite's vocabulary **supersedes** the current model *within
+    the artifacts it produces*; it does not depend on Hermes/OpenSpec
+    (those are tested-against, not required).
+  - **Clean-room scope:** this repo's existing wiki corpus is *not*
+    migrated to the new typed-node / quantitative-confidence scheme.
+    The new model applies only to wikis the rewrite produces.
+- Deferred to the proposal/design stages (not blocking the bind):
+  the exact per-claim confidence formula and rollup choice; the
+  `autonomous` vs `pause_and_ask` automation thresholds; and the
+  precise semantics of the KG → proposal/grill seeding seam.
 
 ## Sources
 

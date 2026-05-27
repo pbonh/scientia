@@ -411,11 +411,19 @@ entry here.
 | Page | Goal | Scenarios | Created |
 |------|------|-----------|---------|
 <!-- entries added by scientia-intent-spec (mirrors of openspec/changes/<id>/specs/) -->
+| [[specs/kg-wiki-model]] | KG Wiki Model | 6 | 2026-05-26 |
+| [[specs/kg-confidence]] | KG Confidence Model | 6 | 2026-05-26 |
+| [[specs/kg-seed-proposal]] | KG-Seeded Proposal | 5 | 2026-05-26 |
+| [[specs/kg-grill-proposal]] | KG-Seeded Grill | 4 | 2026-05-26 |
+| [[specs/intent-artifact-generation]] | Intent Artifact Generation | 6 | 2026-05-26 |
+| [[specs/wiki-maintenance]] | Wiki Maintenance | 4 | 2026-05-26 |
+| [[specs/pipeline-orchestration]] | Pipeline Orchestration | 5 | 2026-05-26 |
+| [[specs/pipeline-tooling]] | Pipeline Tooling | 5 | 2026-05-26 |
 
 ## Statistics
 
-- **Total pages**: 288
+- **Total pages**: 296
 - **Sources ingested**: 24
 - **Bounded contexts**: 16
 - **Context maps**: 6
-- **In-flight changes**: 0
+- **In-flight changes**: 1

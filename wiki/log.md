@@ -409,3 +409,14 @@ Append-only record of every change to the wiki. Each entry is one line:
 - 2026-05-26T18:57:58Z — scientia-wiki-ingest — updated — concepts/c4-model.md — from raw/c4model-com-home.md
 - 2026-05-26T18:57:58Z — scientia-wiki-ingest — created — entities/simon-brown.md — from raw/c4model-com-home.md
 - 2026-05-26T18:57:58Z — scientia-wiki-ingest — updated — index.md — from raw/c4model-com-home.md
+- 2026-05-26T19:41:10Z — scientia-wiki-grill — updated — contexts/spec-driven-development.md — parked in-flight change 2026-05-26-kg-seeded-intent-skills (rewrite + clean-room framing) under Open Questions
+- 2026-05-26T19:41:10Z — scientia-wiki-grill — updated — contexts/knowledge-base-and-wiki.md — added qualitative-vs-quantitative confidence false-cognate
+- 2026-05-26T21:35:04Z — scientia-intent-spec — created — specs/kg-wiki-model.md — mirror of openspec specs/kg-wiki-model/spec.md
+- 2026-05-26T21:35:04Z — scientia-intent-spec — created — specs/kg-confidence.md — mirror of openspec specs/kg-confidence/spec.md
+- 2026-05-26T21:35:04Z — scientia-intent-spec — created — specs/kg-seed-proposal.md — mirror of openspec specs/kg-seed-proposal/spec.md
+- 2026-05-26T21:35:04Z — scientia-intent-spec — created — specs/kg-grill-proposal.md — mirror of openspec specs/kg-grill-proposal/spec.md
+- 2026-05-26T21:35:04Z — scientia-intent-spec — created — specs/intent-artifact-generation.md — mirror of openspec specs/intent-artifact-generation/spec.md
+- 2026-05-26T21:35:04Z — scientia-intent-spec — created — specs/wiki-maintenance.md — mirror of openspec specs/wiki-maintenance/spec.md
+- 2026-05-26T21:35:04Z — scientia-intent-spec — created — specs/pipeline-orchestration.md — mirror of openspec specs/pipeline-orchestration/spec.md
+- 2026-05-26T21:35:04Z — scientia-intent-spec — created — specs/pipeline-tooling.md — mirror of openspec specs/pipeline-tooling/spec.md
+- 2026-05-26T21:35:04Z — scientia-intent-spec — updated — index.md — added Specs table rows (8 capabilities, 41 scenarios)
