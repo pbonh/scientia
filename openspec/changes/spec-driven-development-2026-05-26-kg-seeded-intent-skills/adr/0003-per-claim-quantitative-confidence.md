@@ -25,7 +25,8 @@ poorly calibrated and ignores accumulation,
 **we decided for** a per-claim *quantitative* `[0,1]` model —
 `effective = min(contradiction_floor, base × multiplier)` when contradicted,
 else `base × multiplier` — and for **confirming the seed brief's configuration
-as the committed default** rather than re-deriving it,
+as the committed default**, with two narrow corrections noted below, rather
+than re-deriving it,
 **and against** the per-page qualitative field, a pure-LLM score, or a learned
 probabilistic model,
 **to achieve** a deterministic automation gate that sharpens the
@@ -38,7 +39,8 @@ is a calibrated heuristic, not a probability.
 ASR-4: given a claim's `base`, distinct source count, and contradiction state,
 `effective` must be reproducible from the configured curve and floor, so that
 `seed-proposal` inclusion, `grill-proposal` challenges, and
-`record-adr` auto-recording behave identically across runs and runtimes. This
+`record-adr` recommend-accept presentation behave identically across runs and
+runtimes. This
 also resolves proposal Open Question #4 (confirm defaults at design time).
 
 **Committed configuration defaults (confirmed):**
@@ -52,8 +54,8 @@ thresholds:
   proposal_seed_min: 0.70
   prior_art_floor:   0.60
   grill_dismiss_min: 0.85
-  adr_auto_record_min: 0.90
-  low_confidence_floor: 0.40
+  adr_recommend_accept_min: 0.90   # present a pre-drafted ADR as "recommended: accept"; never auto-records
+  low_confidence_floor: 0.45
 audit:
   staleness_days: 14
 ```
@@ -94,6 +96,17 @@ accumulation-raises / contradiction-caps. **Chosen.**
   a supersession of this ADR, not an in-place edit.
 - Page/edge confidence is a rollup (default `min`) over claims — see
   [[concepts/architecturally-significant-requirement]] and ADR-0004.
+- The accumulation/contradiction asymmetry is **intended, not a tuning defect**:
+  `multiplier(n)` lifts `effective` by at most +10% (cap 1.10) no matter how
+  many sources corroborate, while a single `contradicts` edge caps `effective`
+  to `contradiction_floor` (0.40). One credible contradiction is meant to
+  outweigh many corroborations.
+- Two corrections to the brief's defaults (this ADR): `low_confidence_floor` is
+  **0.45**, kept strictly above `contradiction_floor` (0.40) so a contradicted
+  claim falls unambiguously into the low-confidence band; and
+  `adr_recommend_accept_min` (0.90) **no longer auto-records** (ADR-0010) — it
+  only decides whether a pre-drafted ADR is presented to the Operator as
+  "recommended: accept" versus "needs scrutiny".
 
 ## Supersession
 

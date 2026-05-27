@@ -41,8 +41,9 @@ memory.
 
 ## Acceptance Criteria
 
-- The controller validates each stage's artifact and refuses to advance
-  past a failing one.
+- Advancement past a stage is gated on its artifact passing validation; a
+  failing stage halts the pipeline with its validation errors reported, and
+  cannot be advanced past by the controller alone.
 - In `autonomous` mode a low-confidence pick is written to
   `decisions-log.md` with claim citations and the firing threshold.
 - In `pause_and_ask` mode the controller halts on

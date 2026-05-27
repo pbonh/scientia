@@ -79,10 +79,14 @@ for the design stage's C4 diagrams.
   (proposal, gherkin-spec, adr, c4, tasks, wiki-page, grill).
 - Author **golden-file module tests** (`tests/modules/`) and **fixture-based
   skill evals** (`tests/skills/`, rubric-judged for the LLM-shaped skills).
-- **BREAKING:** the portable rewrite becomes the **canonical** scientia
-  wiki→intent implementation; the existing Hermes/OpenSpec-coupled skill bundle
-  is **deprecated** in its favor. (Deprecation only — see Out of Scope for
-  physical removal.)
+- Introduce the rewrite as an **additive, parallel** portable wiki→intent
+  authoring path, practiced standalone to `tasks.md`; the existing
+  Hermes/OpenSpec-coupled bundle is **not deprecated** by this change. Total
+  replacement is the eventual goal, sequenced **authoring-first** — the
+  kanban-execution and ingest-synthesis phases are deferred to a follow-up (no
+  committed timeline), and deprecation/removal proceeds **phase-by-phase** as
+  each portable replacement lands and passes its evals, never as a single
+  cutover.
 
 ## Out of Scope
 
@@ -90,9 +94,11 @@ for the design stage's C4 diagrams.
   pages stay in the current `concept/entity/summary` + qualitative-confidence
   scheme. The new typed-node / quantitative-confidence model applies only to
   wikis the rewrite *produces* (clean-room, confirmed at wiki-grill).
-- **Physically deleting the existing scientia bundle.** This change deprecates
-  it; removal/cutover is a follow-up change so the working bundle is not pulled
-  out from under in-flight work.
+- **Deprecating or deleting the existing scientia bundle.** This change neither
+  deprecates nor removes it; the bundle stays fully supported. Deprecation and
+  removal proceed phase-by-phase in follow-up changes as portable replacements
+  land and pass their evals, so the working bundle is never pulled out from
+  under in-flight work.
 - **Code generation or execution beyond `tasks.md`.** The brief's pipeline ends
   at task emission (brief §4).
 - **Verification, test-running, or CI integration of the generated pipeline's
@@ -126,21 +132,26 @@ is intentionally empty pending the spec stage):
 
 ## Open Questions
 
-- **Execution & ingest phases.** The brief deliberately ends at `tasks.md`, so
-  this rewrite does *not* reproduce scientia's kanban-execution or
-  ingest-synthesis phases. If "replace existing scientia" is meant to be total,
-  those phases need their own portable design in a follow-up change; otherwise
-  the rewrite is explicitly the *wiki→intent authoring* half only. **Flagged,
-  not decided.**
-- **Cutover.** Does a follow-up change physically remove the deprecated bundle,
-  and on what trigger (new bundle passing its evals)?
-- **Produced-pipeline layout.** The brief's `proposals/<change-id>/` layout
-  differs from scientia's `openspec/changes/` + `development/manifests/`. Should
-  the produced pipeline adopt the brief's flatter layout, or stay
-  OpenSpec-shaped for the tested-against reference? (Design-stage decision.)
-- **Confidence config defaults.** Brief fixes `source_count_curve`,
-  `contradiction_floor 0.40`, `rollup min`, and the threshold table; confirm
-  these at design time rather than re-deriving.
+All four open questions raised at proposal time have since been **resolved**
+(grill of 2026-05-27); recorded here for provenance.
+
+- **Execution & ingest phases — resolved (scope).** Total replacement is the
+  eventual goal, sequenced authoring-first; this change is explicitly the
+  *wiki→intent authoring* half (raw→tasks). The kanban-execution and
+  ingest-synthesis phases get their own portable design in a follow-up, with no
+  committed timeline.
+- **Cutover — resolved.** No single cutover. The rewrite is additive and
+  parallel; deprecation/removal of the existing bundle proceeds phase-by-phase
+  as each portable replacement lands and passes its evals.
+- **Produced-pipeline layout — resolved (ADR-0005).** The produced pipeline
+  uses the brief's flat `proposals/<change-id>/` layout, not OpenSpec's
+  `openspec/changes/` + `development/manifests/` shape; portability forbids
+  coupling produced artifacts to OpenSpec's directory contract.
+- **Confidence config defaults — resolved (ADR-0003).** The brief's config is
+  confirmed as the committed default, with two corrections:
+  `low_confidence_floor` raised to 0.45 (clearing `contradiction_floor` 0.40),
+  and `adr_auto_record_min` repurposed as `adr_recommend_accept_min` (a
+  presentation threshold, not an auto-record trigger).
 
 ## References
 

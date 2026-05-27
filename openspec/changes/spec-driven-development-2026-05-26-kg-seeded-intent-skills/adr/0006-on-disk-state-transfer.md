@@ -9,6 +9,7 @@ superseded_by: null
 asr:
   - "On-disk-only state transfer; the controller passes no in-memory values (ASR-3)."
   - "Portability across runtimes (ASR-1)."
+  - "Validation gating enforced by construction: the advance marker is a package-owned, validator-passed write (ASR-5)."
 shared_types: []
 tags: [spec-driven-development, orchestration, state-transfer]
 created: 2026-05-27
@@ -23,7 +24,9 @@ grill → specs → design → adr → tasks,
 **facing** the choice of how state moves between stages,
 **we decided for** transferring state *only* through on-disk artifacts — each
 stage reads the prior artifact from disk and writes its own — with the
-controller holding no in-memory pipeline object,
+controller holding no in-memory pipeline object, and with the stage-advance
+marker itself being an on-disk artifact written *only* by `kg_pipeline` after
+its validators pass, so the controller cannot fabricate an advance,
 **and against** an in-memory pipeline/context object passed between stages,
 **to achieve** resumability, runtime-agnostic portability, and the ability to
 re-run or inspect any stage from its inputs alone,
@@ -63,6 +66,12 @@ Files are the sole inter-stage channel; `kg_pipeline.paths` locates them.
   does not carry data.
 - Each artifact must be self-sufficient for the next stage — reinforced by the
   validators gating advancement (ADR-0007).
+- The "stage N validated → proceed" record is an on-disk marker written
+  **solely by `kg_pipeline`**, and only when `validators.*` returns an empty
+  error list. Because advancing the pipeline *is* this deterministic, validated
+  write, the LLM controller cannot skip the gate by fiat — it sequences and
+  reads, but cannot author the advance. This closes the ASR-5 enforcement gap
+  that ADR-0007 previously logged as residual risk.
 
 ## Supersession
 

@@ -69,9 +69,11 @@ on ingest and ADR recording.
   `proposals/<change-id>/decisions-log.md` citing the wiki claims and the
   threshold that fired; `pause_and_ask` emits `question-for-operator.md` and
   halts until resolved.
-- `record_adr` additionally auto-records without prompting when a decision's
-  inherited confidence ≥ `adr_auto_record_min` (0.90), even in
-  `pause_and_ask` — high confidence overrides the pause.
+- `record_adr` in `pause_and_ask` **always** pauses for human confirmation; it
+  never auto-records. When a decision's inherited confidence ≥
+  `adr_recommend_accept_min` (0.90) the pre-drafted ADR is presented to the
+  Operator as **"recommended: accept"** (a one-click confirmation), but no
+  immutable ADR is written without the human in the loop.
 - The mode table ships as a default in `references/config.yaml`; projects
   override per stage.
 

@@ -35,9 +35,11 @@ a low-confidence branch is logged and auto-resolved or halts for a human.
 
 State moves only through files (ASR-3). The `pipeline-controller` skill
 sequences the stages, but passes nothing in memory: each stage reads the prior
-stage's artifact off disk, writes its own, and the controller calls the
-matching `kg_pipeline.validators` function and **refuses to advance** while the
-returned error list is non-empty (ASR-5). The produced change lives under a
+stage's artifact off disk and writes its own. Advancement is itself a
+package-owned write: `kg_pipeline` stamps the "stage N → proceed" marker **only**
+when the matching `kg_pipeline.validators` function returns an empty error list,
+so the controller **cannot advance** past a failing stage even if it skips a
+direct validator call (ASR-5; ADR-0006). The produced change lives under a
 flat `proposals/<change-id>/` tree whose paths are centralized in
 `kg_pipeline.paths`, deliberately *not* OpenSpec's `openspec/changes/` +
 `development/manifests/` shape — portability forbids coupling the produced
@@ -168,8 +170,9 @@ specs' Acceptance Criteria and the brief's §4 constraints). In force here:
   passing no in-memory values; stages communicate via files.
 - **ASR-4 Confidence as automation gate** — satisfied by the per-claim
   `effective` model and the per-stage modes.
-- **ASR-5 Validation gating** — satisfied by the controller calling
-  `kg_pipeline.validators` and refusing to advance on a non-empty error list.
+- **ASR-5 Validation gating** — satisfied by `kg_pipeline` owning the
+  stage-advance marker and writing it only when `validators` returns an empty
+  error list (ADR-0006); the controller cannot advance past a failing stage.
 - **ASR-6 Progressive-disclosure skill budget** — satisfied by the 500-line
   cap, agentskills.io-compliant frontmatter, and `references/` for examples.
 - **ASR-7 Provenance / traceability** — satisfied by inline `effective`
@@ -230,34 +233,30 @@ Each is a `## Risks & Pitfalls` bullet from a manifest-core slice-2 concept
 
 ## Open Questions
 
-- **Controller-gate enforceability (new, touches design).** ASR-5 requires
-  the controller to *refuse to advance* past a failing stage, but
-  `pipeline-controller` is itself an LLM `SKILL.md` and could in principle
-  skip the `validators` call. The deterministic guarantee is that
-  `kg_pipeline.validators` is pure Python returning an error list; the open
-  question is whether a thin deterministic entrypoint (a `kg_pipeline` CLI the
-  skill must shell out to) should *own* the gate, or whether the skill-eval
-  rubric asserting the halt is sufficient assurance. Leaning toward the rubric
-  for v1 (keeps the runtime generic per ASR-1), but flagged for
-  `scientia-intent-adr` to settle as `adr-skill-vs-python-split`'s
-  consequence.
-- **Execution & ingest-back phases (promoted from proposal, not resolved by
-  design).** The brief's loop ends at `tasks.md`; this design's controller
-  stage-list is bounded accordingly and deliberately omits scientia's
-  kanban-execution and ingest-synthesis phases. Whether "replace scientia" is
-  total — requiring a portable design for those phases in a follow-up — is a
-  product-scope decision, not a design one. Design proceeds on the bounded
-  raw→tasks loop.
-- **Rollup read-path during mid-edit (new, minor).** `rollup_page` /
-  `rollup_edge` aggregate `effective` over a page's claims. Between an ingest
-  that changes a claim and the next `recompute`, a stored `effective` is
-  stale. The design assumes `audit-wiki`/`recompute_all` precede any rollup
-  that gates seeding; the contract that "rollups read post-recompute values"
-  is captured in `adr-effective-is-stored-derived`. Flagged in case a caller
-  needs a recompute-on-read variant.
-- **Cutover (out of design scope).** Whether and when a follow-up change
-  physically removes the deprecated Hermes/OpenSpec-coupled bundle, and on
-  what trigger, is a release decision — not resolved here.
+All four open questions are now **resolved** (grill of 2026-05-27); kept here
+with their resolutions for provenance.
+
+- **Controller-gate enforceability — resolved (folded into ADR-0006).** ASR-5
+  requires the controller to refuse to advance past a failing stage, but
+  `pipeline-controller` is an LLM `SKILL.md` that could skip the `validators`
+  call. Resolution: the stage-advance marker is a **package-owned, validated
+  write** — `kg_pipeline` writes it only when `validators` returns an empty
+  error list, so the controller cannot fabricate an advance. Folded into
+  ADR-0006; ADR-0007's prior "rubric for v1" stance is rewritten, with the
+  skill-eval rubric retained as defense-in-depth.
+- **Execution & ingest-back phases — resolved (scope).** Total replacement is
+  the eventual goal, sequenced authoring-first; this design's controller
+  stage-list is deliberately the bounded raw→tasks loop. The kanban-execution
+  and ingest-synthesis phases get their own portable design in a follow-up
+  (no committed timeline).
+- **Rollup read-path during mid-edit — resolved (ADR-0004).** `recompute`
+  stamps an `inputs_hash`; `rollup_page` / `rollup_edge` verify it against live
+  inputs and **raise a validation error** on mismatch rather than returning a
+  stale value. No recompute-on-read variant is needed; the time-based staleness
+  trigger remains a heuristic prefetch and the hash check is the hard backstop.
+- **Cutover — resolved.** No single cutover; the rewrite is additive and
+  parallel, and deprecation/removal of the existing bundle proceeds
+  phase-by-phase as each portable replacement lands and passes its evals.
 
 ## Decisions Distilled to ADRs
 
@@ -278,12 +277,15 @@ serves.
   defaults as committed** (`source_count_curve [1.00, 0.04, 1.10]`,
   `contradiction_floor 0.40`, `rollup min`, thresholds
   `proposal_seed_min 0.70` / `prior_art_floor 0.60` / `grill_dismiss_min 0.85`
-  / `adr_auto_record_min 0.90` / `low_confidence_floor 0.40`,
-  `audit.staleness_days 14`). Resolves proposal Open Question #4. *(ASR-4)*
+  / `adr_recommend_accept_min 0.90` / `low_confidence_floor 0.45`,
+  `audit.staleness_days 14`; the accumulation/contradiction asymmetry is
+  documented as intended). Resolves proposal Open Question #4. *(ASR-4)*
 - **`adr-effective-is-stored-derived`** — `effective` is persisted in claim
-  frontmatter yet canonically derived: `recompute` is its only writer and is
-  idempotent, and rollups read post-recompute values (freshness guaranteed by
-  `recompute_all` + the staleness trigger). *(ASR-2, ASR-4)*
+  frontmatter yet canonically derived: `recompute` is its only writer, is
+  idempotent, and stamps an `inputs_hash`; rollups verify that hash and **raise
+  on a stale value** rather than reading it (freshness prefetched by
+  `recompute_all` + the staleness trigger, backstopped by the hash check;
+  resolves design Open Question #3). *(ASR-2, ASR-4)*
 - **`adr-produced-layout-proposals-dir`** — The produced pipeline uses the
   brief's flat `proposals/<change-id>/` layout, centralized in
   `kg_pipeline.paths`, **not** OpenSpec's `openspec/changes/` +
@@ -291,11 +293,13 @@ serves.
   artifacts to OpenSpec's directory contract. Resolves proposal Open
   Question #3. *(ASR-1)*
 - **`adr-on-disk-state-transfer`** — The controller transfers no state in
-  memory; every stage communicates solely through on-disk artifacts. *(ASR-3)*
+  memory; every stage communicates solely through on-disk artifacts, and the
+  stage-advance marker is itself a package-owned write performed only after
+  validators pass — which is what enforces the advance gate. *(ASR-3, ASR-5)*
 - **`adr-skill-vs-python-split`** — LLM judgment lives in `SKILL.md`;
   deterministic, idempotent, testable operations live in `kg_pipeline`; the
-  validator error-list is the deterministic guardrail the controller calls
-  before advancing. *(ASR-2, ASR-5, ASR-6)*
+  validator error-list is the deterministic guardrail, and ADR-0006's
+  package-owned advance marker is what *enforces* it. *(ASR-2, ASR-5, ASR-6)*
 - **`adr-templates-format-map-no-jinja`** — Templates render by
   `str.format_map` over a flat dict; no Jinja or external template engine.
   *(ASR-9)*

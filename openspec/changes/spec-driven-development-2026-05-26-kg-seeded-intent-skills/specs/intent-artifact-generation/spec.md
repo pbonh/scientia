@@ -80,11 +80,11 @@ When the Pipeline Author runs record-adr
 Then two separate ADR files are written, one per decision
 ```
 
-### Scenario: Auto-record a high-confidence decision without prompting
+### Scenario: Present a high-confidence decision as recommended-accept
 ```gherkin
-Given a design decision whose inherited confidence is 0.93, with adr_auto_record_min 0.90
+Given a design decision whose inherited confidence is 0.93, with adr_recommend_accept_min 0.90
 When the Pipeline Author runs record-adr in pause_and_ask mode
-Then the ADR is recorded without prompting the Operator
+Then the Operator is prompted with the pre-drafted ADR marked recommended-accept, and no ADR is recorded until the Operator confirms
 ```
 
 ### Scenario: Trace a task back to its scenario

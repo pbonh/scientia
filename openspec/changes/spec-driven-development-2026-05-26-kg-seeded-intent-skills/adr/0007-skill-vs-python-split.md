@@ -32,9 +32,10 @@ controller calls before advancing,
 (cannot perform LLM tasks),
 **to achieve** determinism and testability (ASR-2), an enforceable validation
 gate (ASR-5), and a small per-skill context budget (ASR-6),
-**accepting** that the controller is itself an LLM skill and could in principle
-skip the validator call — a residual risk addressed for v1 by skill-eval
-rubrics rather than a deterministic entrypoint that owns the gate.
+**accepting** that LLM judgment in skills is non-deterministic by nature; the
+enforcement gap — a controller skipping the validator call — is closed
+deterministically by ADR-0006 (the stage-advance marker is a package-owned,
+validator-passed write), with skill-eval rubrics retained as defense-in-depth.
 
 ## Architecturally Significant Requirement
 
@@ -61,17 +62,19 @@ Skills call the package; the package is pure-Python and golden-tested;
 `validators.*` returns errors the controller acts on.
 *Pros:* determinism where it must hold, judgment where it must happen,
 small skills. **Chosen.**
-*Cons:* the gate's *invocation* depends on the controller skill obeying its
-instructions.
+*Cons:* the gate's *invocation* would depend on the controller obeying its
+instructions — closed by ADR-0006's package-owned, validator-passed advance
+marker.
 
 ## Consequences
 
 - `kg_pipeline` carries every reproducible operation and a golden-file test per
   module; skills carry no derived state.
-- The validation gate is deterministic *as a function*; its *enforcement*
-  depends on the controller calling it. For v1, the skill-eval rubric asserts
-  the halt; a deterministic `kg_pipeline` entrypoint that owns the gate is the
-  flagged alternative if the rubric proves insufficient (design Open Question).
+- The validation gate is deterministic *as a function* (`validators.*` → error
+  list) **and** in its enforcement: per ADR-0006 the stage-advance marker is
+  written only by `kg_pipeline` after the error list is empty, so the controller
+  cannot advance past a failing stage even if it skips a direct validator call.
+  Skill-eval rubrics asserting the halt are retained as defense-in-depth.
 - Skill bodies stay under 500 lines with examples pushed to `references/`.
 
 ## Supersession

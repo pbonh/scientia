@@ -24,16 +24,18 @@ grilling,
 **facing** the tension that a derived value persisted in frontmatter can drift
 from its inputs, while recomputing on every read is wasteful,
 **we decided for** persisting `effective` in the claim's frontmatter but making
-`kg_pipeline.confidence.recompute` its *sole* writer and *idempotent*, with
-rollups reading post-recompute values and freshness guaranteed by
-`recompute_all` plus the audit staleness trigger,
+`kg_pipeline.confidence.recompute` its *sole* writer and *idempotent* — also
+stamping an `inputs_hash` over (`base`, distinct source count, contradiction
+state) — so that a rollup verifies each claim's `inputs_hash` against its live
+inputs and **raises rather than reading a stale value**, with freshness still
+prefetched by `recompute_all` plus the audit staleness trigger,
 **and against** never storing it (recompute on every read) or storing it with
 no freshness guarantee,
 **to achieve** deterministic, idempotent confidence (ASR-2), cheap reads, and a
 stable automation gate (ASR-4),
 **accepting** a window in which a stored `effective` is stale between an
-input change and the next recompute, and a reliance on audit/staleness
-discipline to close it.
+input change and the next recompute — now surfaced as a loud staleness error by
+the `inputs_hash` check rather than silently used.
 
 ## Architecturally Significant Requirement
 
@@ -64,12 +66,17 @@ becomes a vibe again. Rejected.
 ## Consequences
 
 - `base` is immutable after ingest; only `recompute` writes `effective`,
-  `source_count`, and `contradicted`.
-- `rollup_page` / `rollup_edge` read stored `effective`; callers that gate on a
-  rollup must ensure `recompute_all` (or `audit-wiki`) has run — the controller
-  schedules this via `audit.staleness_days`.
-- The staleness window is the explicit cost; a recompute-on-read variant is
-  deferred (see design Open Questions) unless a caller proves it necessary.
+  `source_count`, `contradicted`, and an `inputs_hash` stamp over (`base`,
+  distinct source count, contradiction state).
+- `rollup_page` / `rollup_edge` read stored `effective` but first verify each
+  claim's `inputs_hash` against its live inputs; on mismatch the rollup
+  **raises a validation error** (caught by the controller's advance gate,
+  ADR-0006) rather than returning a stale value. The controller still schedules
+  `recompute_all` / `audit-wiki` via `audit.staleness_days` as a heuristic
+  prefetch; the `inputs_hash` check is the hard backstop for an edit made
+  *within* the staleness window.
+- Reads stay cheap in the fresh case; the recompute-on-read variant (design
+  Open Question #3) is therefore **not needed** and stays deferred.
 
 ## Supersession
 
