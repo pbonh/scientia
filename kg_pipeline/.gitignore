@@ -1,0 +1,17 @@
+# Python build / cache artifacts
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.pytest_cache/
+
+# Runtime stores are operator-owned; keep the dirs, ignore their contents.
+/proposals/*
+!/proposals/.gitkeep
+/wiki/*
+!/wiki/.gitkeep
+
+# Operator-supplied skill-eval outputs (not committed)
+tests/skills/*/output.md

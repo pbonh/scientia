@@ -1,0 +1,44 @@
+---
+change-id: {change_id}
+created: {created}
+---
+
+# Grill
+
+Each entry below interrogates the proposal against the KG. Every entry carries
+its own frontmatter (an `id` and an `addressed:` flag) and cites the wiki page(s)
+it draws from with the claim's `effective` shown inline. **The proposal cannot
+advance to specs until every entry is marked addressed** in the Responses
+section (flip the flag to `true`).
+
+Entry shape (repeat per entry, in the relevant section):
+
+```
+<!-- entry
+id: <kebab-id>
+addressed: true|false
+-->
+- **<short title>** — cites [[<wiki-page> | <edge>]] (effective <0.00>). <body>.
+```
+
+## Open Questions
+
+{open_questions}
+
+## Counter-Claims
+
+{counter_claims}
+
+## Hidden-Assumption Challenges
+
+{hidden_assumption_challenges}
+
+## Failure-Pattern Warnings
+
+{failure_pattern_warnings}
+
+## Responses
+
+_The proposer answers each entry here and flips its `addressed:` flag to `true`._
+
+{responses}

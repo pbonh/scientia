@@ -1,0 +1,89 @@
+[
+  {
+    "frontmatter": {
+      "confidence": {
+        "base": 0.82
+      },
+      "created": "2026-05-28",
+      "id": "claim-llm-maintains-wiki-stateful",
+      "sources": [
+        "source-karpathy-2026"
+      ],
+      "title": "LLM maintains the wiki statefully",
+      "type": "claim"
+    },
+    "id": "claim-llm-maintains-wiki-stateful",
+    "links": [
+      {
+        "kind": "supports",
+        "target_id": "entity-llm-wiki"
+      },
+      {
+        "kind": "refines",
+        "target_id": "claim-rag-rediscovers-knowledge"
+      }
+    ],
+    "type": "claim"
+  },
+  {
+    "frontmatter": {
+      "confidence": {
+        "base": 0.85
+      },
+      "created": "2026-05-28",
+      "id": "claim-rag-rediscovers-knowledge",
+      "sources": [
+        "source-karpathy-2026"
+      ],
+      "title": "RAG rediscovers knowledge on every query",
+      "type": "claim"
+    },
+    "id": "claim-rag-rediscovers-knowledge",
+    "links": [
+      {
+        "kind": "supports",
+        "target_id": "entity-llm-wiki"
+      }
+    ],
+    "type": "claim"
+  },
+  {
+    "frontmatter": {
+      "created": "2026-05-28",
+      "id": "entity-llm-wiki",
+      "title": "LLM Wiki",
+      "type": "entity"
+    },
+    "id": "entity-llm-wiki",
+    "links": [],
+    "type": "entity"
+  },
+  {
+    "frontmatter": {
+      "created": "2026-05-28",
+      "id": "question-when-does-the-wiki-drift",
+      "title": "When does the wiki drift?",
+      "type": "question"
+    },
+    "id": "question-when-does-the-wiki-drift",
+    "links": [
+      {
+        "kind": "mentions",
+        "target_id": "entity-llm-wiki"
+      }
+    ],
+    "type": "question"
+  },
+  {
+    "frontmatter": {
+      "created": "2026-05-28",
+      "id": "source-karpathy-2026",
+      "kind": "publication",
+      "title": "Karpathy 2026",
+      "type": "source"
+    },
+    "id": "source-karpathy-2026",
+    "links": [],
+    "type": "source"
+  }
+]

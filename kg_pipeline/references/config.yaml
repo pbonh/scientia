@@ -1,0 +1,63 @@
+# kg_pipeline — pipeline configuration (the committed defaults).
+#
+# These values are ratified by ADR-0003 (confidence model + thresholds) and
+# ADR-0010 (per-stage human-in-loop modes). A project may override any key by
+# shipping its own references/config.yaml at the project root. The
+# pipeline-controller surfaces any UNRECOGNIZED top-level key to the operator
+# rather than silently ignoring it (spec pipeline-orchestration).
+
+confidence:
+  # [base, step, cap] for the source-count multiplier:
+  #   multiplier(n) = min(cap, base + step * (n - 1))
+  # A claim cited by n distinct Source pages is multiplied by multiplier(n),
+  # capped at +10%. Accumulation is gentle and bounded by design.
+  source_count_curve: [1.00, 0.04, 1.10]
+
+  # A claim with ANY contradicts edge (incoming or outgoing) has its effective
+  # score clamped to at most this floor, regardless of the multiplier. The
+  # accumulation/contradiction asymmetry is intentional (ADR-0003): a single
+  # contradiction outweighs many corroborating sources.
+  contradiction_floor: 0.40
+
+  # Page/edge confidence rollup over the claims involved. `min` is the
+  # conservative default: a chain of reasoning is no stronger than its weakest
+  # link. One of: min | mean | max.
+  rollup: min
+
+thresholds:
+  # context-from-kg: include claims at or above this, within 2 hops of topic.
+  proposal_seed_min: 0.70
+  # prior-art-from-kg: relaxed floor to broaden the related-work set.
+  prior_art_floor: 0.60
+  # grill: a contradicting claim at/above this becomes a counter-claim; a
+  # relied-upon claim BELOW this becomes a hidden-assumption challenge.
+  grill_dismiss_min: 0.85
+  # record-adr: at/above this inherited confidence, present a pre-drafted ADR as
+  # "recommended: accept" for one-click human confirmation. NEVER auto-records
+  # (ADR-0003, ADR-0010).
+  adr_recommend_accept_min: 0.90
+  # below this, a claim is surfaced as a candidate problem / low-confidence
+  # dependency. Kept strictly above contradiction_floor (0.40) by design.
+  low_confidence_floor: 0.45
+
+audit:
+  # The controller triggers audit-wiki between ingest and seed-proposal when the
+  # wiki has not been audited within this many days.
+  staleness_days: 14
+
+# Per-stage human-in-loop mode (ADR-0010). The stages nearest durable
+# architectural commitments default to pause_and_ask; the rest are autonomous
+# because their output is easily revisable.
+#   autonomous    — at a low-confidence branch, pick the safest default and
+#                   append a citation to proposals/<change-id>/decisions-log.md.
+#   pause_and_ask — at a low-confidence branch, emit question-for-operator.md
+#                   and halt until it is resolved.
+modes:
+  ingest_source: autonomous
+  audit_wiki: autonomous
+  seed_proposal: autonomous
+  grill_proposal: autonomous
+  write_specs: autonomous
+  write_design: pause_and_ask
+  record_adr: pause_and_ask
+  generate_tasks: autonomous

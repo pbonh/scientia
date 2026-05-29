@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "kg_pipeline"
+version = "1.0.0"
+description = "Deterministic Python core for the KG-seeded intent-driven Agent Skills pipeline"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+dependencies = [
+    "pyyaml>=6.0",
+]
+
+[project.optional-dependencies]
+# networkx is an optional traversal helper only. The pure-Python `neighbors`
+# path is canonical; when networkx is present it MUST return identical results
+# (ADR-0001, spec kg-wiki-model). Tests are required to pass with it absent.
+graph = ["networkx>=3.0"]
+dev = ["pytest>=7.0"]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["kg_pipeline*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
