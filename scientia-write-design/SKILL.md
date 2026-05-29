@@ -33,9 +33,28 @@ built, the trade-offs, and the component boundaries — grounded in C4 diagrams.
 - Cover: overview, the component/module structure the specs imply, and the
   trade-offs you are accepting.
 
+## Conflict-prevention inputs (gated: `hermes.conflict_prevention: true`)
+
+When the optional `hermes:` config block is present **and**
+`conflict_prevention` is true, additionally emit two sections so the execution
+layer (`scientia-hermes-emit`) can decompose work without collisions:
+
+- **`## Component Map`** — each C4 component id → the path globs it owns, one
+  bullet per component (`- confidence: src/scientia/confidence.py,
+  tests/modules/test_confidence.py`). Derive boundaries from the
+  container/component diagram and the wiki's bounded contexts.
+- **`## Shared Contracts`** — each cross-component interface, pinned to an owner
+  and (where decided) an ADR
+  (`- confidence.EffectiveScore — owner: confidence — ratified-by: ADR-0004`).
+
+`scientia.validators.validate_design(path, require_prevention=True)` then
+**requires** both sections; when prevention is off, neither is required and the
+design keeps its current shape (full backward compatibility).
+
 ## Decision rules
 
-- Validate with `validate_design(paths.design_path(cid))` before finishing.
+- Validate with `validate_design(paths.design_path(cid))` before finishing
+  (pass `require_prevention=True` when `hermes.conflict_prevention` is on).
 - Keep diagrams as mermaid code blocks embedded in markdown — no external image
   assets.
 

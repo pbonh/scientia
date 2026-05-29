@@ -1,0 +1,186 @@
+{
+  "change_id": "2026-05-28-rag-replacement",
+  "board": null,
+  "epic": {
+    "key": "2026-05-28-rag-replacement:epic:a43469c03064",
+    "stage": "epic",
+    "assignee": "",
+    "parents": [],
+    "branch": null,
+    "workspace": "worktree",
+    "tenant": "2026-05-28-rag-replacement",
+    "priority": null,
+    "skills": [],
+    "body_sha": "c7b44b77211e"
+  },
+  "cards": [
+    {
+      "key": "2026-05-28-rag-replacement:task:1:ef54b69df009:impl",
+      "stage": "impl",
+      "assignee": "implementer",
+      "parents": [],
+      "branch": "2026-05-28-rag-replacement/task-1",
+      "workspace": "worktree",
+      "tenant": "2026-05-28-rag-replacement",
+      "priority": null,
+      "skills": [],
+      "body_sha": "425512efe261"
+    },
+    {
+      "key": "2026-05-28-rag-replacement:task:1:ef54b69df009:review",
+      "stage": "review",
+      "assignee": "reviewer",
+      "parents": [
+        "2026-05-28-rag-replacement:task:1:ef54b69df009:impl"
+      ],
+      "branch": null,
+      "workspace": "worktree",
+      "tenant": "2026-05-28-rag-replacement",
+      "priority": null,
+      "skills": [],
+      "body_sha": "6a5067549e12"
+    },
+    {
+      "key": "2026-05-28-rag-replacement:task:1:ef54b69df009:integrate",
+      "stage": "integrate",
+      "assignee": "integrator",
+      "parents": [
+        "2026-05-28-rag-replacement:task:1:ef54b69df009:review"
+      ],
+      "branch": null,
+      "workspace": "worktree",
+      "tenant": "2026-05-28-rag-replacement",
+      "priority": null,
+      "skills": [],
+      "body_sha": "29ebb707032e"
+    },
+    {
+      "key": "2026-05-28-rag-replacement:task:2:90a87ad0c0c0:impl",
+      "stage": "impl",
+      "assignee": "implementer",
+      "parents": [
+        "2026-05-28-rag-replacement:task:1:ef54b69df009:integrate"
+      ],
+      "branch": "2026-05-28-rag-replacement/task-2",
+      "workspace": "worktree",
+      "tenant": "2026-05-28-rag-replacement",
+      "priority": null,
+      "skills": [],
+      "body_sha": "b7fc4c0bfc17"
+    },
+    {
+      "key": "2026-05-28-rag-replacement:task:2:90a87ad0c0c0:review",
+      "stage": "review",
+      "assignee": "reviewer",
+      "parents": [
+        "2026-05-28-rag-replacement:task:2:90a87ad0c0c0:impl"
+      ],
+      "branch": null,
+      "workspace": "worktree",
+      "tenant": "2026-05-28-rag-replacement",
+      "priority": null,
+      "skills": [],
+      "body_sha": "e9c54b4e73eb"
+    },
+    {
+      "key": "2026-05-28-rag-replacement:task:2:90a87ad0c0c0:integrate",
+      "stage": "integrate",
+      "assignee": "integrator",
+      "parents": [
+        "2026-05-28-rag-replacement:task:2:90a87ad0c0c0:review"
+      ],
+      "branch": null,
+      "workspace": "worktree",
+      "tenant": "2026-05-28-rag-replacement",
+      "priority": null,
+      "skills": [],
+      "body_sha": "b88c472ae821"
+    },
+    {
+      "key": "2026-05-28-rag-replacement:task:3:f2246285d8fc:impl",
+      "stage": "impl",
+      "assignee": "implementer",
+      "parents": [
+        "2026-05-28-rag-replacement:task:1:ef54b69df009:integrate",
+        "2026-05-28-rag-replacement:task:2:90a87ad0c0c0:integrate"
+      ],
+      "branch": "2026-05-28-rag-replacement/task-3",
+      "workspace": "worktree",
+      "tenant": "2026-05-28-rag-replacement",
+      "priority": null,
+      "skills": [],
+      "body_sha": "bc9bf2d11955"
+    },
+    {
+      "key": "2026-05-28-rag-replacement:task:3:f2246285d8fc:review",
+      "stage": "review",
+      "assignee": "reviewer",
+      "parents": [
+        "2026-05-28-rag-replacement:task:3:f2246285d8fc:impl"
+      ],
+      "branch": null,
+      "workspace": "worktree",
+      "tenant": "2026-05-28-rag-replacement",
+      "priority": null,
+      "skills": [],
+      "body_sha": "2aa674a16651"
+    },
+    {
+      "key": "2026-05-28-rag-replacement:task:3:f2246285d8fc:integrate",
+      "stage": "integrate",
+      "assignee": "integrator",
+      "parents": [
+        "2026-05-28-rag-replacement:task:3:f2246285d8fc:review"
+      ],
+      "branch": null,
+      "workspace": "worktree",
+      "tenant": "2026-05-28-rag-replacement",
+      "priority": null,
+      "skills": [],
+      "body_sha": "79aed528caae"
+    },
+    {
+      "key": "2026-05-28-rag-replacement:task:4:05950916c679:impl",
+      "stage": "impl",
+      "assignee": "implementer",
+      "parents": [
+        "2026-05-28-rag-replacement:task:1:ef54b69df009:integrate",
+        "2026-05-28-rag-replacement:task:3:f2246285d8fc:integrate"
+      ],
+      "branch": "2026-05-28-rag-replacement/task-4",
+      "workspace": "worktree",
+      "tenant": "2026-05-28-rag-replacement",
+      "priority": null,
+      "skills": [],
+      "body_sha": "b353392f894d"
+    },
+    {
+      "key": "2026-05-28-rag-replacement:task:4:05950916c679:review",
+      "stage": "review",
+      "assignee": "reviewer",
+      "parents": [
+        "2026-05-28-rag-replacement:task:4:05950916c679:impl"
+      ],
+      "branch": null,
+      "workspace": "worktree",
+      "tenant": "2026-05-28-rag-replacement",
+      "priority": null,
+      "skills": [],
+      "body_sha": "97ecef356755"
+    },
+    {
+      "key": "2026-05-28-rag-replacement:task:4:05950916c679:integrate",
+      "stage": "integrate",
+      "assignee": "integrator",
+      "parents": [
+        "2026-05-28-rag-replacement:task:4:05950916c679:review"
+      ],
+      "branch": null,
+      "workspace": "worktree",
+      "tenant": "2026-05-28-rag-replacement",
+      "priority": null,
+      "skills": [],
+      "body_sha": "47936bb4352f"
+    }
+  ]
+}

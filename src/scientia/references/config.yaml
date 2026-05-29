@@ -61,3 +61,27 @@ modes:
   write_design: pause_and_ask
   record_adr: pause_and_ask
   generate_tasks: autonomous
+
+# Optional execution layer (scientia-hermes-*). Absent this block, the pipeline
+# still ends at tasks.md and never touches Hermes. Present, the scientia
+# orchestrator recommends scientia-hermes-init -> scientia-hermes-emit once tasks
+# are complete. All keys are optional; the 0.2 defaults are shown.
+hermes:
+  board: ""                   # "" = Hermes default board; else a slug
+  tenant_strategy: change-id  # change-id | none
+  workspace: worktree         # scratch | worktree | dir:<absolute-path>
+  pipeline: impl-review-integrate   # impl-review-integrate | single
+  emit_epic: true
+  on_supersede: archive       # archive | leave
+  backend: rest               # rest | cli
+  rest_base: http://127.0.0.1:8787/api/plugins/kanban   # loopback dashboard plugin
+  conflict_prevention: true   # C4-derived waves + shared-contract ratification
+  max_parallel_per_file_group: 2   # wave cap on tasks sharing a touched path
+  preflight:
+    require_gateway: true
+    require_profiles: true
+  profiles:                   # provisioned/validated by scientia-hermes-init
+    implementer:       "Writes code + tests for one task in an isolated worktree."
+    reviewer:          "Reviews a completed task branch against its spec scenario."
+    integrator:        "Merges an approved branch to trunk; routes conflicts to conflict-resolver."
+    conflict-resolver: "Reconciles merge/semantic conflicts using spec scenarios, ratified contracts, and C4 boundaries; resolves without human input where safe, escalates only genuine spec contradictions."

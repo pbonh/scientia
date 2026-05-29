@@ -88,6 +88,39 @@ def test_tasks_requires_checkboxes_and_traces(tmp_path):
     assert validators.validate_tasks(t)
 
 
+def test_design_prevention_gate_requires_component_map_and_contracts(tmp_path):
+    d = tmp_path / "design.md"
+    base = "# Design\n```mermaid\nC4Container\nContainer(a, \"A\")\n```\n"
+    d.write_text(base)
+    # Off by default: a plain C4 design is fine (backward compatible / AC-16).
+    assert validators.validate_design(d) == []
+    # On: the Component Map + Shared Contracts sections become mandatory.
+    errors = validators.validate_design(d, require_prevention=True)
+    assert any("Component Map" in e for e in errors)
+    assert any("Shared Contracts" in e for e in errors)
+    full = base + "\n## Component Map\n- c: a.py\n\n## Shared Contracts\n- c.X — owner: c\n"
+    d.write_text(full)
+    assert validators.validate_design(d, require_prevention=True) == []
+
+
+def test_tasks_prevention_gate_requires_ownership_markers(tmp_path):
+    t = tmp_path / "tasks.md"
+    bare = "# Tasks\n- [ ] **1.** do it <!-- traces-spec: cap#s1 -->\n"
+    t.write_text(bare)
+    # Off by default: still clean (AC-16).
+    assert validators.validate_tasks(t) == []
+    # On: the task needs component + touches markers.
+    errors = validators.validate_tasks(t, require_prevention=True)
+    assert any("component" in e for e in errors)
+    assert any("touches" in e for e in errors)
+    owned = (
+        "# Tasks\n<!-- traces-spec: cap#s1 -->\n<!-- component: c -->\n"
+        "<!-- touches: a.py -->\n- [ ] **1.** do it\n"
+    )
+    t.write_text(owned)
+    assert validators.validate_tasks(t, require_prevention=True) == []
+
+
 def test_grill_blocks_while_unaddressed(tmp_path):
     g = tmp_path / "grill.md"
     body = (

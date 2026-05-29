@@ -53,6 +53,9 @@ __all__ = [
     "tasks_path",
     "advance_dir",
     "advance_marker_path",
+    "hermes_dir",
+    "emit_ledger_path",
+    "evidence_path",
 ]
 
 
@@ -148,3 +151,20 @@ def advance_dir(change_id: str) -> Path:
 def advance_marker_path(change_id: str, stage: str) -> Path:
     """Path to the ``<stage>.ok`` marker that gates advancement past ``stage``."""
     return advance_dir(change_id) / f"{stage}.ok"
+
+
+def hermes_dir(change_id: str) -> Path:
+    """Directory holding the Hermes execution-layer artifacts for a change."""
+    return change_dir(change_id) / "hermes"
+
+
+def emit_ledger_path(change_id: str) -> Path:
+    """The local key->id index written by ``scientia.hermes.apply`` (not truth;
+    Hermes owns truth in its SQLite DB)."""
+    return hermes_dir(change_id) / "emit-ledger.json"
+
+
+def evidence_path(change_id: str) -> Path:
+    """The neutral closed-loop sync artifact (M3): synthesized worker handoffs,
+    deliberately *not* the wiki."""
+    return change_dir(change_id) / "implementation-evidence.md"

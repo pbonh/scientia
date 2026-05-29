@@ -46,6 +46,26 @@ One orchestrator plus eight stage skills:
 | `scientia-record-adr` | one ADR per durable decision |
 | `scientia-generate-tasks` | the final tasks.md checklist |
 
+### Optional execution layer (`scientia-hermes-*`)
+
+If a `hermes:` block is present in `config.yaml`, the pipeline does not have to
+stop at `tasks.md`: four further skills turn the finished change into a live,
+dependency-ordered [Hermes](https://github.com/NousResearch/hermes-agent) Kanban
+board of `impl → review → integrate` pipelines and report progress back. They are
+fully optional — absent the block, nothing here runs.
+
+| Skill | Phase |
+|-------|-------|
+| `scientia-hermes-init` | provision/validate the board, profiles, and gateway |
+| `scientia-hermes-emit` | emit cards + dependency links (REST-first, idempotent) |
+| `scientia-hermes-status` | read the board back and surface real escalations |
+| `scientia-conflict-resolver` | the Hermes *profile* that resolves integrate conflicts without a human |
+
+Conflict robustness is the headline property: work is decomposed along C4
+component boundaries so collisions are *prevented* (file-collision waves +
+shared-contract ratification, in `scientia.hermes.conflict`), and the residue is
+*resolved* automatically by the `conflict-resolver` profile.
+
 ## Layout
 
 ```
@@ -59,14 +79,20 @@ scientia/                     # this repo — a collection of installable skills
 ├── scientia-write-design/
 ├── scientia-record-adr/
 ├── scientia-generate-tasks/
+├── scientia-hermes-init/     # optional execution layer (only with a hermes: block)
+├── scientia-hermes-emit/
+├── scientia-hermes-status/
+├── scientia-conflict-resolver/  # the Hermes conflict-resolver profile
 ├── src/scientia/             # the importable Python package
 │   ├── wiki/__init__.py      # Page, Link, load/list/parse_links/neighbors/write_page
+│   ├── hermes/               # the execution layer (parse/idempotency/conflict/plan/
+│   │                         #   render/ledger/validators pure; preflight/apply impure)
 │   ├── confidence.py         # multiplier, recompute(_all), rollup_page/edge
 │   ├── templates.py          # render / render_to_file (str.format_map, no Jinja)
 │   ├── validators.py         # validate_* → error lists
 │   ├── advance.py            # the package-owned stage-advance gate
 │   ├── paths.py              # single source of file-layout truth
-│   └── references/           # config.yaml + 7 *.md.tmpl (shipped as package data)
+│   └── references/           # config.yaml + *.md.tmpl (shipped as package data)
 ├── tests/{modules,skills,fixtures}/ + run_all.py
 └── examples/sources/karpathy-2026.md   # the worked example
 ```
