@@ -60,7 +60,7 @@ def _cli_transport() -> Transport:
                 "--title", body["title"], "--body", body["body"],
                 "--status", body.get("status", "todo"),
             ]
-            for opt in ("assignee", "tenant", "workspace", "branch"):
+            for opt in ("board", "assignee", "tenant", "workspace", "branch"):
                 if body.get(opt):
                     cmd += [f"--{opt}", body[opt]]
             for skill in body.get("skills", []):
@@ -132,7 +132,7 @@ def apply(
         entry = entries[card.key]
         if entry.hermes_id:  # ledger pre-check -> idempotent skip
             continue
-        resp = transport("POST", "/tasks", render.task_payload(card))
+        resp = transport("POST", "/tasks", render.task_payload(card, plan.board))
         entry.hermes_id = str(resp.get("id"))
         entry.last_status = "todo"
         created.add(card.key)

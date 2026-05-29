@@ -4,6 +4,7 @@ from pathlib import Path
 
 from scientia.hermes import parse, render
 from scientia.hermes.plan import PlanOptions, Routing, build_plan
+from scientia.hermes.render import task_payload, to_cli, to_rest
 
 FIX = Path(__file__).resolve().parent.parent / "fixtures" / "hermes-change"
 ROUTING = Routing(
@@ -84,3 +85,30 @@ def test_archive_ops_patch_status_archived():
         {"method": "PATCH", "path": "/tasks/H1", "json": {"status": "archived"}},
         {"method": "PATCH", "path": "/tasks/H2", "json": {"status": "archived"}},
     ]
+
+
+def _board_plan(board):
+    tasks = parse.parse_tasks((FIX / "tasks.md").read_text())
+    c4, cm, contracts = parse.parse_design((FIX / "design.md").read_text())
+    routing = Routing(
+        default_implementer="implementer", default_reviewer="reviewer",
+        default_integrator="integrator", resolver="conflict-resolver",
+        tenant="2026-05-28-rag-replacement", board=board,
+    )
+    return build_plan("2026-05-28-rag-replacement", tasks, c4, cm, contracts, routing, PlanOptions())
+
+
+def test_resolved_board_is_threaded_into_payloads_and_argv():
+    # No board -> the field is omitted (back-compat with the Hermes default board).
+    assert "board" not in task_payload(next(iter(_plan().cards)))
+    # board set on the plan -> sent on every create (REST body + --board CLI flag).
+    plan = _board_plan("acme-service")
+    assert task_payload(next(iter(plan.cards)), plan.board)["board"] == "acme-service"
+    rest_creates = [o["json"] for o in to_rest(plan, _id_for(plan)) if o["path"] == "/tasks"]
+    assert rest_creates and all(p["board"] == "acme-service" for p in rest_creates)
+    cli_creates = [
+        a for a in to_cli(plan, _id_for(plan)) if a[:4] == ["hermes", "kanban", "task", "create"]
+    ]
+    assert cli_creates and all(
+        "--board" in a and a[a.index("--board") + 1] == "acme-service" for a in cli_creates
+    )

@@ -33,14 +33,20 @@ __all__ = [
 IdFor = Callable[[str], Optional[str]]
 
 
-def task_payload(card: CardSpec) -> dict:
-    """The ``POST /tasks`` JSON body for one card (idempotency key = card key)."""
+def task_payload(card: CardSpec, board: Optional[str] = None) -> dict:
+    """The ``POST /tasks`` JSON body for one card (idempotency key = card key).
+
+    ``board`` is the plan-level board slug (:attr:`EmitPlan.board`) the card lands
+    on; when set it is sent so each project's cards stay on their own board.
+    """
     payload: dict = {
         "title": card.title,
         "body": card.body,
         "status": "todo",
         "idempotency_key": card.key,
     }
+    if board:
+        payload["board"] = board
     if card.assignee:
         payload["assignee"] = card.assignee
     if card.tenant:
@@ -66,7 +72,7 @@ def to_rest(plan: EmitPlan, id_for: IdFor) -> list[dict]:
     ops: list[dict] = []
     for card in _all_cards(plan):
         ops.append(
-            {"method": "POST", "path": "/tasks", "json": task_payload(card), "key": card.key}
+            {"method": "POST", "path": "/tasks", "json": task_payload(card, plan.board), "key": card.key}
         )
     for card in _all_cards(plan):
         for parent_key in card.parents:
@@ -91,6 +97,8 @@ def to_cli(plan: EmitPlan, id_for: IdFor) -> list[list[str]]:
             "--idempotency-key", card.key,
             "--status", "todo",
         ]
+        if plan.board:
+            cmd += ["--board", plan.board]
         if card.assignee:
             cmd += ["--assignee", card.assignee]
         if card.tenant:
