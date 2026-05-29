@@ -37,8 +37,11 @@ clean preflight. Absent a `hermes:` config block, do not activate at all.
 2. **Resolve the routing (judgment).** Build a
    `scientia.hermes.plan.Routing` grounded in the C4 components and ADR
    ownership: pick `default_implementer/reviewer/integrator`, the `resolver`
-   (the `conflict-resolver` profile), per-task overrides, `board`, and `tenant`
-   (from `tenant_strategy`). Compose nothing the package composes.
+   (the `conflict-resolver` profile), per-task overrides, `board`
+   (`scientia.hermes.board.resolve_board(<`board:` config>)`, which defaults to
+   the current project name when `board:` is unset — matching the board
+   `scientia-hermes-init` provisioned), and `tenant` (from `tenant_strategy`).
+   Compose nothing the package composes.
 3. **Set options.** Build `scientia.hermes.plan.PlanOptions` from the `hermes:`
    block (`pipeline`, `emit_epic`, `workspace`, `max_parallel_per_file_group`,
    `conflict_prevention`). Pass `adr_contracts` = the set of contract names

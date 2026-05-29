@@ -40,8 +40,13 @@ roster and writing each profile's description); the package
    diagram and ADR ownership: always `implementer`, `reviewer`, `integrator`;
    add **`conflict-resolver`** whenever `pipeline: impl-review-integrate`. Author
    a one-line description for each (the committed defaults are a good template).
-3. **Ensure the board exists.** Create it if `board:` names a slug that is
-   absent; otherwise use the Hermes default board.
+3. **Ensure the board exists.** Resolve the board name with
+   `scientia.hermes.board.resolve_board(<the `board:` config value>)`: an
+   explicit `board:` slug wins verbatim; otherwise it defaults to the current
+   project name (the slugified `scientia.paths.project_name()`) so the board
+   belongs to this project rather than Hermes' shared default. `scientia-hermes-emit`
+   calls the same resolver, so init and emit never disagree on the name. Create
+   that board if it is absent.
 4. **Ensure every profile exists**, including `conflict-resolver` for the
    three-stage pipeline. The `conflict-resolver` profile body ships as
    `scientia-conflict-resolver/SKILL.md` — install/register it as the Hermes

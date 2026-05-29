@@ -18,6 +18,7 @@ golden-file testable with no Hermes and no network.
 
 from __future__ import annotations
 
+from scientia.hermes.board import resolve_board, slugify
 from scientia.hermes.conflict import (
     ContractError,
     compute_waves,
@@ -50,6 +51,9 @@ from scientia.hermes.plan import (
 )
 
 __all__ = [
+    # board
+    "resolve_board",
+    "slugify",
     # parse
     "Task",
     "ComponentMap",

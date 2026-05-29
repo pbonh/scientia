@@ -67,7 +67,8 @@ modes:
 # orchestrator recommends scientia-hermes-init -> scientia-hermes-emit once tasks
 # are complete. All keys are optional; the 0.2 defaults are shown.
 hermes:
-  board: ""                   # "" = Hermes default board; else a slug
+  board: ""                   # "" = the current project name (slugified project dir,
+                              #      via scientia.hermes.board.resolve_board); else an explicit slug
   tenant_strategy: change-id  # change-id | none
   workspace: worktree         # scratch | worktree | dir:<absolute-path>
   pipeline: impl-review-integrate   # impl-review-integrate | single

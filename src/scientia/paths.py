@@ -37,6 +37,7 @@ from pathlib import Path
 
 __all__ = [
     "project_root",
+    "project_name",
     "references_dir",
     "config_path",
     "wiki_dir",
@@ -68,6 +69,16 @@ def project_root() -> Path:
     if env:
         return Path(env).expanduser().resolve()
     return Path.cwd()
+
+
+def project_name() -> str:
+    """The current project's name — the basename of :func:`project_root`.
+
+    Defaults the Hermes board name so each project's cards land on their own
+    board rather than a shared default (see
+    :func:`scientia.hermes.board.resolve_board`).
+    """
+    return project_root().name
 
 
 def references_dir() -> Path:

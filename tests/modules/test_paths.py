@@ -32,6 +32,14 @@ def test_references_dir_falls_back_to_bundle(root):
     assert (paths.references_dir() / "config.yaml").is_file()
 
 
+def test_project_name_is_the_root_basename(root, monkeypatch):
+    proj = root / "My Project.v2"
+    proj.mkdir()
+    monkeypatch.setenv("SCIENTIA_ROOT", str(proj))
+    # Raw basename; slugification for the board name lives in scientia.hermes.board.
+    assert paths.project_name() == "My Project.v2"
+
+
 def _render_proposal(cid):
     templates.render_to_file(
         "proposal", paths.proposal_path(cid), change_id=cid, topic="t", created="2026-05-28",
