@@ -101,6 +101,31 @@ ln -s ~/src/scientia/scientia* ~/.agents/skills/
 pip install ~/src/scientia
 ```
 
+### Claude Code
+
+Claude Code discovers skills under `~/.claude/skills/`. Each skill directory must
+sit at the top level of that folder; a single symlink to the repo root is not
+enough because Claude expects each skill's `SKILL.md` to be one directory level
+below the skills root.
+
+```bash
+# 1. Clone this repo anywhere you like.
+git clone <this-repo> ~/.agents/skills/scientia
+
+# 2. Symlink each individual skill directory into ~/.claude/skills/
+for dir in ~/.agents/skills/scientia/scientia*/; do
+  ln -s "$(realpath "$dir")" ~/.claude/skills/
+done
+
+# 3. Install the supporting Python package and set the project root.
+pip install ~/.agents/skills/scientia
+export SCIENTIA_ROOT=/path/to/your/project
+```
+
+Afterwards, `~/.claude/skills/` should contain the individual skill directories
+(e.g., `~/.claude/skills/scientia/`, `~/.claude/skills/scientia-ingest-source/`,
+etc.), not a top-level `scientia` directory that wraps them.
+
 ## Test
 
 ```bash
