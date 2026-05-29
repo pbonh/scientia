@@ -3,7 +3,7 @@ requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "kg_pipeline"
+name = "scientia"
 version = "1.0.0"
 description = "Deterministic Python core for the KG-seeded intent-driven Agent Skills pipeline"
 readme = "README.md"
@@ -21,8 +21,13 @@ graph = ["networkx>=3.0"]
 dev = ["pytest>=7.0"]
 
 [tool.setuptools.packages.find]
-where = ["."]
-include = ["kg_pipeline*"]
+where = ["src"]
+include = ["scientia*"]
+
+[tool.setuptools.package-data]
+# The pipeline templates + committed config defaults ship with the wheel so
+# `references_dir()` can fall back to them when a project has no local override.
+scientia = ["references/*.yaml", "references/*.tmpl"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

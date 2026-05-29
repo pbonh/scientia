@@ -6,11 +6,11 @@ from pathlib import Path
 from tests.skills import eval_harness
 
 EXPECTED = {
-    "ingest-source",
-    "seed-proposal",
-    "grill-proposal",
-    "record-adr",
-    "pipeline-controller",
+    "scientia-ingest-source",
+    "scientia-seed-proposal",
+    "scientia-grill-proposal",
+    "scientia-record-adr",
+    "scientia",
 }
 
 

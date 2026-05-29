@@ -1,10 +1,10 @@
-"""Tests for kg_pipeline.templates (spec: pipeline-tooling; ADR-0008)."""
+"""Tests for scientia.templates (spec: pipeline-tooling; ADR-0008)."""
 
 from pathlib import Path
 
 import pytest
 
-from kg_pipeline import templates
+from scientia import templates
 
 
 @pytest.fixture
@@ -12,7 +12,7 @@ def refs_root(tmp_path, monkeypatch):
     """A project root with a tiny references/ dir, isolated via env var."""
     refs = tmp_path / "references"
     refs.mkdir()
-    monkeypatch.setenv("KG_PIPELINE_ROOT", str(tmp_path))
+    monkeypatch.setenv("SCIENTIA_ROOT", str(tmp_path))
     return refs
 
 
@@ -49,6 +49,6 @@ def test_render_to_file_is_idempotent(refs_root, tmp_path):
 
 def test_shipped_templates_all_resolve(monkeypatch):
     # With no project-local references/, the bundle's own templates resolve.
-    monkeypatch.delenv("KG_PIPELINE_ROOT", raising=False)
+    monkeypatch.delenv("SCIENTIA_ROOT", raising=False)
     for name in ("proposal", "grill", "gherkin-spec", "adr", "c4", "tasks", "wiki-page"):
         assert templates.template_path(name).is_file()

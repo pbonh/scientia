@@ -1,6 +1,7 @@
-# KG-Seeded Intent-Driven Skills
+# scientia — KG-Seeded Intent-Driven Agent Skills
 
-A portable [Agent Skills](https://agentskills.io) bundle that runs a research-and-
+A client-agnostic set of [Agent Skills](https://agentskills.io/specification)
+plus a small supporting Python package (`scientia`) that runs a research-and-
 development pipeline from raw sources to implementation tasks:
 
 ```
@@ -13,45 +14,98 @@ per-claim **confidence** score acts as a deterministic gate: where the KG is
 high-confidence the pipeline can automate a decision; where it is low-confidence
 the pipeline surfaces the gap as a challenge instead of guessing.
 
-The bundle is runtime-agnostic. **opencode + OpenSpec** are the tested-against
-implementation, **not** a requirement — there is no graph database, no vector
-store, no external service, and no SaaS dependency.
+The skills follow the agentskills.io spec, so they run on any conforming runtime.
+There is no graph database, no vector store, no external service, and no SaaS
+dependency.
 
 ## Two layers
 
 | Layer | Where | Carries |
 |-------|-------|---------|
-| **Skills** (LLM judgment) | `.agents/skills/*/SKILL.md` | reading sources/proposals, rating confidence, writing prose |
-| **`kg_pipeline`** (determinism) | `kg_pipeline/*.py` | parsing, the confidence math, templating, validation, the advance gate |
+| **Skills** (LLM judgment) | `~/.agents/skills/scientia*/SKILL.md` | reading sources/proposals, rating confidence, writing prose |
+| **`scientia`** (determinism) | the pip-installed `scientia` package | parsing, the confidence math, templating, validation, the advance gate |
 
 The dividing line is the spine of the design: anything whose output must be
 byte-stable and testable lives in the package; anything needing an LLM's reading
 lives in a skill. Skills hold no derived state — they call the package and
 read/write files.
 
+## The skills
+
+One orchestrator plus eight stage skills:
+
+| Skill | Stage |
+|-------|-------|
+| `scientia` | orchestration (walks the pipeline, gates every stage) |
+| `scientia-ingest-source` | ingest a raw source into the wiki |
+| `scientia-audit-wiki` | periodic, non-destructive wiki health check |
+| `scientia-seed-proposal` | seed a proposal from the KG |
+| `scientia-grill-proposal` | interrogate the proposal against the KG |
+| `scientia-write-specs` | gherkin-style specs |
+| `scientia-write-design` | design.md with C4 diagrams |
+| `scientia-record-adr` | one ADR per durable decision |
+| `scientia-generate-tasks` | the final tasks.md checklist |
+
 ## Layout
 
 ```
-kg_pipeline/                  # this bundle (the working directory)
-├── kg_pipeline/              # the importable Python package
+scientia/                     # this repo — a collection of installable skills
+├── scientia/                 # orchestrator skill (SKILL.md)
+├── scientia-ingest-source/   # … the eight stage skills, one dir each
+├── scientia-audit-wiki/
+├── scientia-seed-proposal/
+├── scientia-grill-proposal/
+├── scientia-write-specs/
+├── scientia-write-design/
+├── scientia-record-adr/
+├── scientia-generate-tasks/
+├── src/scientia/             # the importable Python package
 │   ├── wiki/__init__.py      # Page, Link, load/list/parse_links/neighbors/write_page
 │   ├── confidence.py         # multiplier, recompute(_all), rollup_page/edge
 │   ├── templates.py          # render / render_to_file (str.format_map, no Jinja)
 │   ├── validators.py         # validate_* → error lists
 │   ├── advance.py            # the package-owned stage-advance gate
-│   └── paths.py              # single source of file-layout truth
-├── .agents/skills/<9 skills>/SKILL.md
-├── references/               # config.yaml + 7 *.md.tmpl
+│   ├── paths.py              # single source of file-layout truth
+│   └── references/           # config.yaml + 7 *.md.tmpl (shipped as package data)
 ├── tests/{modules,skills,fixtures}/ + run_all.py
-└── sources/  wiki/  proposals/   # runtime stores (operator-owned)
+└── examples/sources/karpathy-2026.md   # the worked example
 ```
 
-## Install & test
+Each top-level `scientia*` directory is a self-contained Agent Skill; the
+non-skill directories (`src/`, `tests/`, `examples/`) have no `SKILL.md` and are
+ignored by skill runtimes.
+
+## Install
+
+Skills are discovered from `~/.agents/skills`, and the `scientia` package must be
+importable by whatever runs the skills.
 
 ```bash
-pip install -e .            # deps: pyyaml (networkx is an optional extra: .[graph])
+# 1. Clone the skills directly into the skills root so they are discovered.
+git clone <this-repo> ~/.agents/skills
+
+# 2. Install the supporting Python package (pip or uv).
+pip install ~/.agents/skills            # or:  uv pip install ~/.agents/skills
+#   networkx is an optional traversal extra:  pip install '~/.agents/skills[graph]'
+
+# 3. Point the pipeline at your project (where sources/, wiki/, proposals/ live).
+export SCIENTIA_ROOT=/path/to/your/project
+```
+
+If you keep other skills in `~/.agents/skills`, clone this repo elsewhere and
+symlink the `scientia*` directories into the skills root instead:
+
+```bash
+git clone <this-repo> ~/src/scientia
+ln -s ~/src/scientia/scientia* ~/.agents/skills/
+pip install ~/src/scientia
+```
+
+## Test
+
+```bash
 python -m pytest tests/modules -q
-python tests/run_all.py     # validators + skill evals + golden-file suite
+python tests/run_all.py     # SKILL.md validation + skill evals + golden-file suite
 ```
 
 `networkx` is optional — the pure-Python neighborhood traversal is canonical and
@@ -60,23 +114,24 @@ return identical results.
 
 ## Running the pipeline on any Agent-Skills runtime
 
-1. Point your runtime at `.agents/skills/` so it discovers the nine skills.
-2. Set `KG_PIPELINE_ROOT` to your project directory (or run from it). The
-   pipeline reads `sources/`, builds `wiki/`, and writes `proposals/<change-id>/`
-   there. Paths are centralized in `kg_pipeline.paths`.
-3. Ask the runtime to *run the pipeline* — `pipeline-controller` activates and
+1. Ensure the `scientia*` skills are discoverable under `~/.agents/skills` and the
+   `scientia` package is installed (see Install).
+2. Set `SCIENTIA_ROOT` to your project directory (or run from it). The pipeline
+   reads `sources/`, builds `wiki/`, and writes `proposals/<change-id>/` there.
+   Paths are centralized in `scientia.paths`.
+3. Ask the runtime to *run the pipeline* — the `scientia` skill activates and
    walks the stages, activating each child skill and gating every stage through
    the package-owned validation marker.
 
 ### Configuration (`references/config.yaml`)
 
-The committed defaults (ADR-0003, ADR-0010): the source-count curve
-`[1.00, 0.04, 1.10]` (+10% cap), `contradiction_floor 0.40`, `rollup min`, and
-thresholds `proposal_seed_min 0.70` / `prior_art_floor 0.60` /
+The committed defaults ship as package data (ADR-0003, ADR-0010): the
+source-count curve `[1.00, 0.04, 1.10]` (+10% cap), `contradiction_floor 0.40`,
+`rollup min`, and thresholds `proposal_seed_min 0.70` / `prior_art_floor 0.60` /
 `grill_dismiss_min 0.85` / `adr_recommend_accept_min 0.90` /
 `low_confidence_floor 0.45`; `audit.staleness_days 14`; and the per-stage
-`autonomous` / `pause_and_ask` mode table. A project may ship its own
-`references/config.yaml` to override.
+`autonomous` / `pause_and_ask` mode table. A project may override any key by
+placing its own `references/config.yaml` at `SCIENTIA_ROOT`.
 
 ## Confidence model
 
@@ -97,7 +152,8 @@ caps it hard.
 
 ## Walkthrough (smoke test)
 
-`sources/karpathy-2026.md` ships as the worked example. After `ingest-source`:
+`examples/sources/karpathy-2026.md` ships as the worked example. Copy it into
+`$SCIENTIA_ROOT/sources/` and run `scientia-ingest-source`:
 
 ```
 wiki/
@@ -108,10 +164,11 @@ wiki/
 └── question-when-does-the-wiki-drift.md
 ```
 
-After `seed-proposal` for topic `entity-llm-wiki`, both claims (≥ 0.70) appear in
-`## Context (from KG)` with their `effective` shown inline, the open question
-appears under `## Candidate Problems`, and `## Constraints (from KG)` is present
-but empty with `_KG provided no high-confidence content for this subsection._`.
+After `scientia-seed-proposal` for topic `entity-llm-wiki`, both claims (≥ 0.70)
+appear in `## Context (from KG)` with their `effective` shown inline, the open
+question appears under `## Candidate Problems`, and `## Constraints (from KG)` is
+present but empty with `_KG provided no high-confidence content for this
+subsection._`.
 
 A second source citing the same two claims raises both `effective` values via the
 source-count multiplier (`n=2 → ×1.04`) — the smallest end-to-end demonstration

@@ -1,4 +1,4 @@
-"""Golden-file tests for kg_pipeline.wiki (spec: kg-wiki-model, pipeline-tooling).
+"""Golden-file tests for scientia.wiki (spec: kg-wiki-model, pipeline-tooling).
 
 No mocks: the fixture wiki is the input, and the actual JSON dump is compared
 against a committed expected dump.
@@ -10,8 +10,8 @@ from pathlib import Path
 
 import pytest
 
-from kg_pipeline import wiki
-from kg_pipeline.wiki import Link, Page
+from scientia import wiki
+from scientia.wiki import Link, Page
 
 FIX = Path(__file__).resolve().parent.parent / "fixtures"
 WIKI_BASIC = FIX / "wiki-basic"

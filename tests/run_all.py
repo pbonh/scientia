@@ -19,13 +19,15 @@ import sys
 from pathlib import Path
 
 BUNDLE = Path(__file__).resolve().parent.parent
-if str(BUNDLE) not in sys.path:
-    sys.path.insert(0, str(BUNDLE))
+for _p in (BUNDLE / "src", BUNDLE):
+    if str(_p) not in sys.path:
+        sys.path.insert(0, str(_p))
 
-from kg_pipeline import validators  # noqa: E402
+from scientia import validators  # noqa: E402
 from tests.skills import eval_harness  # noqa: E402
 
-SKILLS_DIR = BUNDLE / ".agents" / "skills"
+# Skills live at the repo root (each is a `~/.agents/skills`-style directory).
+SKILLS_DIR = BUNDLE
 MAX_SKILL_LINES = 500
 
 

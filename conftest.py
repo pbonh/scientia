@@ -1,12 +1,13 @@
-"""Make the bundle importable when running the suite without `pip install -e .`.
+"""Make the package and test helpers importable without an editable install.
 
-Adds the bundle root (this file's directory) to ``sys.path`` so ``import
-kg_pipeline`` resolves to ``./kg_pipeline``.
+Adds ``src/`` (so ``import scientia`` resolves to ``./src/scientia``) and the
+repo root (so ``from tests... import ...`` resolves) to ``sys.path``.
 """
 
 import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
-if str(ROOT) not in sys.path:
-    sys.path.insert(0, str(ROOT))
+for _p in (ROOT / "src", ROOT):
+    if str(_p) not in sys.path:
+        sys.path.insert(0, str(_p))

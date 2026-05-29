@@ -1,8 +1,8 @@
-"""Tests for kg_pipeline.validators (spec: pipeline-tooling; ADR-0007)."""
+"""Tests for scientia.validators (spec: pipeline-tooling; ADR-0007)."""
 
 from pathlib import Path
 
-from kg_pipeline import validators
+from scientia import validators
 
 PROPOSAL_OK = """---
 change-id: c

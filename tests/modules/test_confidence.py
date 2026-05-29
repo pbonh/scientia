@@ -1,4 +1,4 @@
-"""Golden-file tests for kg_pipeline.confidence (spec: kg-confidence).
+"""Golden-file tests for scientia.confidence (spec: kg-confidence).
 
 Determinism + idempotency, source-count multiplier (incl. the +10% cap), the
 contradiction floor, the min rollup, and the raise-on-stale guarantee. These
@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-from kg_pipeline import confidence, wiki
+from scientia import confidence, wiki
 
 FIX = Path(__file__).resolve().parent.parent / "fixtures"
 WIKI_CONF = FIX / "wiki-confidence"

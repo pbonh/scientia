@@ -13,7 +13,7 @@ This harness is dependency-free and runs in three layers, each as available:
 2. **Deterministic mention check (when an output exists).** If the operator has
    produced the skill's output at ``<skill>/output.md``, the harness checks that
    every required mention is present and every forbidden mention is absent.
-3. **LLM judge (optional).** If ``$KG_PIPELINE_EVAL_JUDGE`` names a command and
+3. **LLM judge (optional).** If ``$SCIENTIA_EVAL_JUDGE`` names a command and
    an output exists, the harness pipes the rubric + output to it for a verdict.
    With no judge configured this layer is reported as skipped — no external
    service is ever required (ASR-1).
@@ -100,7 +100,7 @@ def _mention_check(rubric: Rubric, output: str) -> tuple[str, list[str]]:
 
 
 def _llm_judge(rubric_path: Path, output_path: Path) -> str:
-    cmd = os.environ.get("KG_PIPELINE_EVAL_JUDGE")
+    cmd = os.environ.get("SCIENTIA_EVAL_JUDGE")
     if not cmd:
         return "skipped (no judge configured)"
     try:

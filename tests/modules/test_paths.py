@@ -1,15 +1,15 @@
-"""Tests for kg_pipeline.paths and the advance gate (ADR-0005, ADR-0006)."""
+"""Tests for scientia.paths and the advance gate (ADR-0005, ADR-0006)."""
 
 from pathlib import Path
 
 import pytest
 
-from kg_pipeline import advance, paths, templates
+from scientia import advance, paths, templates
 
 
 @pytest.fixture
 def root(tmp_path, monkeypatch):
-    monkeypatch.setenv("KG_PIPELINE_ROOT", str(tmp_path))
+    monkeypatch.setenv("SCIENTIA_ROOT", str(tmp_path))
     return tmp_path
 
 

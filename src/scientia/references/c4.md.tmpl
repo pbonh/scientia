@@ -1,0 +1,44 @@
+---
+change-id: {change_id}
+created: {created}
+---
+
+# Design: {design_title}
+
+## Overview
+
+{overview}
+
+## System Context (C4 L1)
+
+```mermaid
+C4Context
+    title System Context — {design_title}
+    Person(operator, "Operator", "Curates sources, resolves halts")
+    System(sys, "{system_name}", "{system_description}")
+    System_Ext(runtime, "Agent Skills runtime", "Discovers & activates skills")
+    Rel(operator, sys, "drives")
+    Rel(runtime, sys, "executes skills in")
+```
+
+## Container Diagram (C4 L2)
+
+```mermaid
+C4Container
+    title Containers — {design_title}
+    Person(operator, "Operator")
+    Container(skills, "Agent Skills layer", "SKILL.md", "Carries LLM judgment")
+    Container(pkg, "scientia", "Python", "Deterministic, idempotent core")
+    ContainerDb(store, "Filesystem stores", "markdown", "wiki/ and proposals/")
+    Rel(operator, skills, "runs")
+    Rel(skills, pkg, "calls deterministic ops")
+    Rel(pkg, store, "reads / writes")
+```
+
+## Components & Approach
+
+{components}
+
+## Trade-offs
+
+{tradeoffs}
