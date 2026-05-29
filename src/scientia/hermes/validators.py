@@ -18,7 +18,7 @@ from typing import Optional, Sequence
 
 from scientia.hermes import idempotency
 from scientia.hermes.parse import ComponentMap, Task
-from scientia.hermes.plan import EmitPlan, Routing
+from scientia.hermes.plan import EmitPlan, ProfileModel, Routing
 
 __all__ = ["validate_plan", "validate_routing", "ownership_smells"]
 
@@ -109,6 +109,41 @@ def validate_routing(
         for name in sorted(referenced):
             if name not in known_profiles:
                 errors.append(f"routing references unknown profile {name!r}")
+
+    # Validate profile model configs: every model must have a provider and a
+    # non-empty model identifier.  Unknown providers are warned (not errored)
+    # because the set of valid providers is open-ended.
+    _KNOWN_PROVIDERS = {"fireworks", "openai", "anthropic", "google", "mistral", "together", "deepseek", "local"}
+    for pname, pm in routing.profile_models.items():
+        if not pm.model:
+            errors.append(f"profile {pname!r} has a model config but no model identifier")
+        if pm.provider not in _KNOWN_PROVIDERS:
+            errors.append(
+                f"profile {pname!r} model provider {pm.provider!r} is not "
+                f"in the known set {{'fireworks', 'openai', 'anthropic', ...}}"
+            )
+        if pm.temperature is not None and not (0.0 <= pm.temperature <= 2.0):
+            errors.append(
+                f"profile {pname!r} temperature {pm.temperature} is out of range [0, 2]"
+            )
+        if pm.max_tokens is not None and pm.max_tokens <= 0:
+            errors.append(f"profile {pname!r} max_tokens must be positive, got {pm.max_tokens}")
+    if routing.default_model is not None:
+        dm = routing.default_model
+        if not dm.model:
+            errors.append("routing default_model has no model identifier")
+        if dm.provider not in _KNOWN_PROVIDERS:
+            errors.append(
+                f"routing default_model provider {dm.provider!r} is not "
+                f"in the known set {{'fireworks', 'openai', 'anthropic', ...}}"
+            )
+        if dm.temperature is not None and not (0.0 <= dm.temperature <= 2.0):
+            errors.append(
+                f"routing default_model temperature {dm.temperature} is out of range [0, 2]"
+            )
+        if dm.max_tokens is not None and dm.max_tokens <= 0:
+            errors.append(f"routing default_model max_tokens must be positive, got {dm.max_tokens}")
+
     return errors
 
 

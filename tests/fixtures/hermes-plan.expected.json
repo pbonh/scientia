@@ -11,7 +11,8 @@
     "tenant": "2026-05-28-rag-replacement",
     "priority": null,
     "skills": [],
-    "body_sha": "c7b44b77211e"
+    "body_sha": "c7b44b77211e",
+    "model": null
   },
   "cards": [
     {
@@ -24,7 +25,8 @@
       "tenant": "2026-05-28-rag-replacement",
       "priority": null,
       "skills": [],
-      "body_sha": "425512efe261"
+      "body_sha": "425512efe261",
+      "model": null
     },
     {
       "key": "2026-05-28-rag-replacement:task:1:ef54b69df009:review",
@@ -38,7 +40,8 @@
       "tenant": "2026-05-28-rag-replacement",
       "priority": null,
       "skills": [],
-      "body_sha": "6a5067549e12"
+      "body_sha": "6a5067549e12",
+      "model": null
     },
     {
       "key": "2026-05-28-rag-replacement:task:1:ef54b69df009:integrate",
@@ -52,7 +55,8 @@
       "tenant": "2026-05-28-rag-replacement",
       "priority": null,
       "skills": [],
-      "body_sha": "29ebb707032e"
+      "body_sha": "29ebb707032e",
+      "model": null
     },
     {
       "key": "2026-05-28-rag-replacement:task:2:90a87ad0c0c0:impl",
@@ -66,7 +70,8 @@
       "tenant": "2026-05-28-rag-replacement",
       "priority": null,
       "skills": [],
-      "body_sha": "b7fc4c0bfc17"
+      "body_sha": "b7fc4c0bfc17",
+      "model": null
     },
     {
       "key": "2026-05-28-rag-replacement:task:2:90a87ad0c0c0:review",
@@ -80,7 +85,8 @@
       "tenant": "2026-05-28-rag-replacement",
       "priority": null,
       "skills": [],
-      "body_sha": "e9c54b4e73eb"
+      "body_sha": "e9c54b4e73eb",
+      "model": null
     },
     {
       "key": "2026-05-28-rag-replacement:task:2:90a87ad0c0c0:integrate",
@@ -94,7 +100,8 @@
       "tenant": "2026-05-28-rag-replacement",
       "priority": null,
       "skills": [],
-      "body_sha": "b88c472ae821"
+      "body_sha": "b88c472ae821",
+      "model": null
     },
     {
       "key": "2026-05-28-rag-replacement:task:3:f2246285d8fc:impl",
@@ -109,7 +116,8 @@
       "tenant": "2026-05-28-rag-replacement",
       "priority": null,
       "skills": [],
-      "body_sha": "bc9bf2d11955"
+      "body_sha": "bc9bf2d11955",
+      "model": null
     },
     {
       "key": "2026-05-28-rag-replacement:task:3:f2246285d8fc:review",
@@ -123,7 +131,8 @@
       "tenant": "2026-05-28-rag-replacement",
       "priority": null,
       "skills": [],
-      "body_sha": "2aa674a16651"
+      "body_sha": "2aa674a16651",
+      "model": null
     },
     {
       "key": "2026-05-28-rag-replacement:task:3:f2246285d8fc:integrate",
@@ -137,7 +146,8 @@
       "tenant": "2026-05-28-rag-replacement",
       "priority": null,
       "skills": [],
-      "body_sha": "79aed528caae"
+      "body_sha": "79aed528caae",
+      "model": null
     },
     {
       "key": "2026-05-28-rag-replacement:task:4:05950916c679:impl",
@@ -152,7 +162,8 @@
       "tenant": "2026-05-28-rag-replacement",
       "priority": null,
       "skills": [],
-      "body_sha": "b353392f894d"
+      "body_sha": "b353392f894d",
+      "model": null
     },
     {
       "key": "2026-05-28-rag-replacement:task:4:05950916c679:review",
@@ -166,7 +177,8 @@
       "tenant": "2026-05-28-rag-replacement",
       "priority": null,
       "skills": [],
-      "body_sha": "97ecef356755"
+      "body_sha": "97ecef356755",
+      "model": null
     },
     {
       "key": "2026-05-28-rag-replacement:task:4:05950916c679:integrate",
@@ -180,7 +192,8 @@
       "tenant": "2026-05-28-rag-replacement",
       "priority": null,
       "skills": [],
-      "body_sha": "47936bb4352f"
+      "body_sha": "47936bb4352f",
+      "model": null
     }
   ]
 }

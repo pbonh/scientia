@@ -45,6 +45,7 @@ from scientia.hermes.plan import (
     CycleError,
     EmitPlan,
     PlanOptions,
+    ProfileModel,
     Routing,
     TaskRouting,
     build_plan,
@@ -73,6 +74,7 @@ __all__ = [
     "synthetic_edges",
     "ratify_contracts",
     # plan
+    "ProfileModel",
     "Routing",
     "TaskRouting",
     "PlanOptions",

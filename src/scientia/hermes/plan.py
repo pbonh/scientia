@@ -17,6 +17,13 @@ work always starts from a trunk that already contains what it depends on. The
 Card bodies are composed deterministically (from the ``hermes-card`` /
 ``hermes-handoff`` templates) so the golden suite is byte-stable; the skill's
 judgment is exercised earlier, in choosing the :class:`Routing`.
+
+Each card now carries an optional :class:`ProfileModel` describing which LLM
+provider and model the assignee profile should use. The model is resolved at
+plan-build time from the routing's ``profile_models`` map (itself sourced from
+the ``hermes.profiles.<name>.model`` config block), so the rest of the pipeline
+— render, apply, preflight — can treat it as a simple attached value. Profiles
+without an explicit model fall through to the routing-level ``default_model``.
 """
 
 from __future__ import annotations
@@ -30,6 +37,7 @@ from scientia.hermes import conflict, idempotency
 from scientia.hermes.parse import C4Diagram, ComponentMap, Contract, Task
 
 __all__ = [
+    "ProfileModel",
     "TaskRouting",
     "Routing",
     "PlanOptions",
@@ -45,6 +53,32 @@ __all__ = [
 # --------------------------------------------------------------------------- #
 # Inputs                                                                       #
 # --------------------------------------------------------------------------- #
+
+@dataclass(frozen=True)
+class ProfileModel:
+    """Per-profile LLM provider and model configuration.
+
+    Sourced from the ``hermes.profiles.<name>.model`` config block.  Each
+    profile can target a different vendor/model pair (e.g. Fireworks for the
+    implementer, Anthropic for the reviewer).  Profiles without an explicit
+    model fall through to the routing-level ``default_model``.
+
+    ``provider`` is a short vendor slug (``fireworks``, ``openai``,
+    ``anthropic``, etc.).  ``model`` is the provider-specific model identifier.
+    ``base_url`` overrides the provider's default API endpoint (useful for
+    Fireworks' OpenAI-compatible endpoint or local proxies).  ``api_key_env``
+    names the environment variable that holds the API key; preflight checks
+    that it is set when the profile requires a model.
+    """
+
+    provider: str = "fireworks"
+    model: str = ""
+    base_url: Optional[str] = None
+    api_key_env: Optional[str] = None
+    temperature: Optional[float] = None
+    max_tokens: Optional[int] = None
+
+
 @dataclass(frozen=True)
 class TaskRouting:
     """Per-task overrides of the default per-stage assignees (LLM judgment)."""
@@ -68,6 +102,8 @@ class Routing:
     epic_assignee: Optional[str] = None
     board: Optional[str] = None
     tenant: Optional[str] = None
+    profile_models: Mapping[str, ProfileModel] = field(default_factory=dict)
+    default_model: Optional[ProfileModel] = None
 
 
 @dataclass(frozen=True)
@@ -102,6 +138,7 @@ class CardSpec:
     skills: tuple[str, ...]
     priority: Optional[int]
     stage: str  # "impl" | "review" | "integrate" | "epic" | "single"
+    model: Optional[ProfileModel] = None
 
 
 @dataclass(frozen=True)
@@ -313,6 +350,16 @@ def build_plan(
     def tkey(num: int, stage: str) -> str:
         return idempotency.card_key(change_id, number=num, sha=shas[num], stage=stage)
 
+    # Model resolution: per-profile override, else routing-level default.
+    def _model_for(assignee: str) -> Optional[ProfileModel]:
+        """Look up the model config for a profile; fall through to default."""
+        if assignee in routing.profile_models:
+            pm = routing.profile_models[assignee]
+            # A profile entry with an empty model string means "use default".
+            if pm.model:
+                return pm
+        return routing.default_model
+
     cards: list[CardSpec] = []
     for task in sorted(tasks, key=lambda t: t.number):
         tr = routing.per_task.get(task.number, TaskRouting())
@@ -335,6 +382,7 @@ def build_plan(
                 skills=tr.skills,
                 priority=options.priority,
                 stage=stage,
+                model=_model_for(assignee),
             )
 
         if single:
@@ -354,6 +402,7 @@ def build_plan(
 
     epic: Optional[CardSpec] = None
     if options.emit_epic and (c4 or comp_map.owned or contracts):
+        epic_model = _model_for(routing.epic_assignee) if routing.epic_assignee else routing.default_model
         epic = CardSpec(
             key=idempotency.epic_key(
                 change_id, sha=idempotency.design_sha(c4, comp_map, contracts)
@@ -368,6 +417,7 @@ def build_plan(
             skills=(),
             priority=options.priority,
             stage="epic",
+            model=epic_model,
         )
 
     ordered = _toposort(cards)

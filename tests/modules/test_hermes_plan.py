@@ -51,6 +51,18 @@ def _body_sha(text):
 
 
 def _project(plan):
+    def _model_dict(m):
+        if m is None:
+            return None
+        return {
+            "provider": m.provider,
+            "model": m.model,
+            "base_url": m.base_url,
+            "api_key_env": m.api_key_env,
+            "temperature": m.temperature,
+            "max_tokens": m.max_tokens,
+        }
+
     def card(c):
         return {
             "key": c.key,
@@ -63,6 +75,7 @@ def _project(plan):
             "priority": c.priority,
             "skills": list(c.skills),
             "body_sha": _body_sha(c.body),
+            "model": _model_dict(c.model),
         }
     return {
         "change_id": plan.change_id,

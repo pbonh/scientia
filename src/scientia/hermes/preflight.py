@@ -7,12 +7,18 @@ unauthenticated — §12), and — when ``require_gateway`` — probes that the 
 gateway is actually accepting connections, since ``ready`` tasks sit forever
 without it.
 
+When profiles carry a :class:`~scientia.hermes.plan.ProfileModel`, preflight
+also checks that every referenced ``api_key_env`` variable is actually present
+in the environment.  A missing key would cause a runtime failure deep in a
+worker — far better to catch it at the gate.
+
 The probe is injectable (``gateway_probe``) so the deterministic suite can run
 this module with no Hermes present.
 """
 
 from __future__ import annotations
 
+import os
 import socket
 from dataclasses import dataclass, field
 from typing import Callable, Optional
@@ -90,5 +96,32 @@ def check(
                 f"Hermes gateway not reachable at {host}:{port}; start it "
                 f"(`hermes gateway start`) or ready tasks will sit forever"
             )
+
+    # Model config gate: every card with a ProfileModel that names an api_key_env
+    # must find that variable set in the environment.
+    _KNOWN_PROVIDERS = {"fireworks", "openai", "anthropic", "google", "mistral", "together", "deepseek", "local"}
+    seen_envs: set[str] = set()
+    for card in cards:
+        if card.model is None:
+            continue
+        if card.model.provider not in _KNOWN_PROVIDERS:
+            warnings.append(
+                f"card {card.key!r} model provider {card.model.provider!r} is not "
+                f"in the known set {{'fireworks', 'openai', 'anthropic', ...}}; "
+                f"ensure the Hermes backend supports it"
+            )
+        if not card.model.model:
+            errors.append(
+                f"card {card.key!r} has a model config but no model identifier"
+            )
+        if card.model.api_key_env:
+            env_name = card.model.api_key_env
+            if env_name not in seen_envs:
+                seen_envs.add(env_name)
+                if env_name not in os.environ:
+                    errors.append(
+                        f"card {card.key!r} model requires env var {env_name!r} "
+                        f"but it is not set; export it before emit"
+                    )
 
     return PreflightResult(ok=not errors, errors=errors, warnings=warnings)

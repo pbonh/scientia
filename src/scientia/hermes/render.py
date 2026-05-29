@@ -18,7 +18,7 @@ from __future__ import annotations
 
 from typing import Callable, Iterable, Optional
 
-from scientia.hermes.plan import CardSpec, EmitPlan
+from scientia.hermes.plan import CardSpec, EmitPlan, ProfileModel
 
 __all__ = [
     "task_payload",
@@ -31,6 +31,23 @@ __all__ = [
 ]
 
 IdFor = Callable[[str], Optional[str]]
+
+
+def _model_payload(model: ProfileModel) -> dict:
+    """Serialize a :class:`ProfileModel` into the JSON object sent to the backend."""
+    payload: dict = {
+        "provider": model.provider,
+        "model": model.model,
+    }
+    if model.base_url is not None:
+        payload["base_url"] = model.base_url
+    if model.api_key_env is not None:
+        payload["api_key_env"] = model.api_key_env
+    if model.temperature is not None:
+        payload["temperature"] = model.temperature
+    if model.max_tokens is not None:
+        payload["max_tokens"] = model.max_tokens
+    return payload
 
 
 def task_payload(card: CardSpec, board: Optional[str] = None) -> dict:
@@ -59,6 +76,8 @@ def task_payload(card: CardSpec, board: Optional[str] = None) -> dict:
         payload["skills"] = list(card.skills)
     if card.priority is not None:
         payload["priority"] = card.priority
+    if card.model is not None:
+        payload["model"] = _model_payload(card.model)
     return payload
 
 
@@ -111,6 +130,17 @@ def to_cli(plan: EmitPlan, id_for: IdFor) -> list[list[str]]:
             cmd += ["--priority", str(card.priority)]
         for skill in card.skills:
             cmd += ["--skill", skill]
+        if card.model is not None:
+            cmd += ["--model-provider", card.model.provider,
+                    "--model-name", card.model.model]
+            if card.model.base_url is not None:
+                cmd += ["--model-base-url", card.model.base_url]
+            if card.model.api_key_env is not None:
+                cmd += ["--model-api-key-env", card.model.api_key_env]
+            if card.model.temperature is not None:
+                cmd += ["--model-temperature", str(card.model.temperature)]
+            if card.model.max_tokens is not None:
+                cmd += ["--model-max-tokens", str(card.model.max_tokens)]
         argv.append(cmd)
     for card in _all_cards(plan):
         for parent_key in card.parents:
