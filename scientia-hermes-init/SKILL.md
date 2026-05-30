@@ -59,6 +59,18 @@ roster and writing each profile's description); the package
    file). **Never** symlink `scientia-*` skills into a profile — the dispatcher
    auto-loads `kanban-worker`, and per-profile scientia skill symlinks only
    dangle when the shared skills source moves.
+
+   When `hermes.profiles.<name>.model` is set in config, pass the model
+   identifier to `provision_profile.sh --model <provider:model_id>` so the
+   profile's `config.yaml` is written automatically. If no model is specified,
+   warn: "profile `<name>` has no model binding; agents will use the global
+   default. Set `hermes.profiles.<name>.model` in config or run `hermes model`
+   interactively."
+
+   The implementer's description should include: "Complete your work card when
+   tests pass; do not self-block for review — the pipeline has a dedicated
+   reviewer stage." This prevents the green self-block stall pattern where
+   implementers block with `review-required` instead of completing.
 5. **Run preflight.** Call `scientia.hermes.preflight.check(plan_or_probe,
    require_gateway=..., rest_base=..., known_profiles=...)`. Refuse on a
    non-loopback `rest_base` (the kanban routes are unauthenticated) and on a

@@ -3,201 +3,166 @@
   "board": null,
   "epic": {
     "key": "2026-05-28-rag-replacement:epic:a43469c03064",
-    "stage": "epic",
+    "title": "[epic] 2026-05-28-rag-replacement",
     "assignee": "",
     "parents": [],
-    "branch": null,
-    "workspace": "worktree",
     "tenant": "2026-05-28-rag-replacement",
-    "priority": null,
-    "skills": [],
-    "body_sha": "c7b44b77211e",
-    "model": null
+    "workspace": "worktree",
+    "stage": "epic",
+    "body_sha": "6f97f328d273"
   },
   "cards": [
     {
       "key": "2026-05-28-rag-replacement:task:1:ef54b69df009:impl",
-      "stage": "impl",
+      "title": "[impl] #1 Define the EffectiveScore contract",
       "assignee": "implementer",
       "parents": [],
-      "branch": "2026-05-28-rag-replacement/task-1",
-      "workspace": "worktree",
       "tenant": "2026-05-28-rag-replacement",
-      "priority": null,
-      "skills": [],
-      "body_sha": "67509e5e579d",
-      "model": null,
+      "workspace": "worktree",
+      "branch": "2026-05-28-rag-replacement/task-1",
+      "stage": "impl",
+      "body_sha": "036e9b67c2d0",
       "wave": 0
     },
     {
       "key": "2026-05-28-rag-replacement:task:1:ef54b69df009:review",
-      "stage": "review",
+      "title": "[review] #1 Define the EffectiveScore contract",
       "assignee": "reviewer",
       "parents": [
         "2026-05-28-rag-replacement:task:1:ef54b69df009:impl"
       ],
-      "branch": null,
-      "workspace": "worktree",
       "tenant": "2026-05-28-rag-replacement",
-      "priority": null,
-      "skills": [],
-      "body_sha": "3189c28ccc9e",
-      "model": null
+      "workspace": "worktree",
+      "stage": "review",
+      "body_sha": "74e31a36dd40"
     },
     {
       "key": "2026-05-28-rag-replacement:task:1:ef54b69df009:integrate",
-      "stage": "integrate",
+      "title": "[integrate] #1 Define the EffectiveScore contract",
       "assignee": "integrator",
       "parents": [
         "2026-05-28-rag-replacement:task:1:ef54b69df009:review"
       ],
-      "branch": null,
-      "workspace": "worktree",
       "tenant": "2026-05-28-rag-replacement",
-      "priority": null,
-      "skills": [],
-      "body_sha": "f6b3fd7715cd",
-      "model": null
+      "workspace": "worktree",
+      "stage": "integrate",
+      "body_sha": "1f5c47738629"
     },
     {
       "key": "2026-05-28-rag-replacement:task:2:90a87ad0c0c0:impl",
-      "stage": "impl",
+      "title": "[impl] #2 Add the source-count multiplier (depends on #1)",
       "assignee": "implementer",
       "parents": [
         "2026-05-28-rag-replacement:task:1:ef54b69df009:integrate"
       ],
-      "branch": "2026-05-28-rag-replacement/task-2",
-      "workspace": "worktree",
       "tenant": "2026-05-28-rag-replacement",
-      "priority": null,
-      "skills": [],
-      "body_sha": "06eb7fcb4557",
-      "model": null,
+      "workspace": "worktree",
+      "branch": "2026-05-28-rag-replacement/task-2",
+      "stage": "impl",
+      "body_sha": "38e21a9e4f8c",
       "wave": 0
     },
     {
       "key": "2026-05-28-rag-replacement:task:2:90a87ad0c0c0:review",
-      "stage": "review",
+      "title": "[review] #2 Add the source-count multiplier (depends on #1)",
       "assignee": "reviewer",
       "parents": [
         "2026-05-28-rag-replacement:task:2:90a87ad0c0c0:impl"
       ],
-      "branch": null,
-      "workspace": "worktree",
       "tenant": "2026-05-28-rag-replacement",
-      "priority": null,
-      "skills": [],
-      "body_sha": "892cdff21926",
-      "model": null
+      "workspace": "worktree",
+      "stage": "review",
+      "body_sha": "f235ccb65123"
     },
     {
       "key": "2026-05-28-rag-replacement:task:2:90a87ad0c0c0:integrate",
-      "stage": "integrate",
+      "title": "[integrate] #2 Add the source-count multiplier (depends on #1)",
       "assignee": "integrator",
       "parents": [
         "2026-05-28-rag-replacement:task:2:90a87ad0c0c0:review"
       ],
-      "branch": null,
-      "workspace": "worktree",
       "tenant": "2026-05-28-rag-replacement",
-      "priority": null,
-      "skills": [],
-      "body_sha": "54d9a6e03a0f",
-      "model": null
+      "workspace": "worktree",
+      "stage": "integrate",
+      "body_sha": "281820b8e9f7"
     },
     {
       "key": "2026-05-28-rag-replacement:task:3:f2246285d8fc:impl",
-      "stage": "impl",
+      "title": "[impl] #3 Add the contradiction floor and effective recompute (depends on #2)",
       "assignee": "implementer",
       "parents": [
         "2026-05-28-rag-replacement:task:1:ef54b69df009:integrate",
         "2026-05-28-rag-replacement:task:2:90a87ad0c0c0:integrate"
       ],
-      "branch": "2026-05-28-rag-replacement/task-3",
-      "workspace": "worktree",
       "tenant": "2026-05-28-rag-replacement",
-      "priority": null,
-      "skills": [],
-      "body_sha": "000c238bc127",
-      "model": null,
+      "workspace": "worktree",
+      "branch": "2026-05-28-rag-replacement/task-3",
+      "stage": "impl",
+      "body_sha": "1f124036b9a1",
       "wave": 1
     },
     {
       "key": "2026-05-28-rag-replacement:task:3:f2246285d8fc:review",
-      "stage": "review",
+      "title": "[review] #3 Add the contradiction floor and effective recompute (depends on #2)",
       "assignee": "reviewer",
       "parents": [
         "2026-05-28-rag-replacement:task:3:f2246285d8fc:impl"
       ],
-      "branch": null,
-      "workspace": "worktree",
       "tenant": "2026-05-28-rag-replacement",
-      "priority": null,
-      "skills": [],
-      "body_sha": "af6247da75e4",
-      "model": null
+      "workspace": "worktree",
+      "stage": "review",
+      "body_sha": "641ebf2b76fb"
     },
     {
       "key": "2026-05-28-rag-replacement:task:3:f2246285d8fc:integrate",
-      "stage": "integrate",
+      "title": "[integrate] #3 Add the contradiction floor and effective recompute (depends on #2)",
       "assignee": "integrator",
       "parents": [
         "2026-05-28-rag-replacement:task:3:f2246285d8fc:review"
       ],
-      "branch": null,
-      "workspace": "worktree",
       "tenant": "2026-05-28-rag-replacement",
-      "priority": null,
-      "skills": [],
-      "body_sha": "9577d642d7fc",
-      "model": null
+      "workspace": "worktree",
+      "stage": "integrate",
+      "body_sha": "14d05159411a"
     },
     {
       "key": "2026-05-28-rag-replacement:task:4:05950916c679:impl",
-      "stage": "impl",
+      "title": "[impl] #4 Roll the new score into the wiki dump (depends on #1, #3)",
       "assignee": "implementer",
       "parents": [
         "2026-05-28-rag-replacement:task:1:ef54b69df009:integrate",
         "2026-05-28-rag-replacement:task:3:f2246285d8fc:integrate"
       ],
-      "branch": "2026-05-28-rag-replacement/task-4",
-      "workspace": "worktree",
       "tenant": "2026-05-28-rag-replacement",
-      "priority": null,
-      "skills": [],
-      "body_sha": "73d81b85be9a",
-      "model": null,
+      "workspace": "worktree",
+      "branch": "2026-05-28-rag-replacement/task-4",
+      "stage": "impl",
+      "body_sha": "33e07b453a27",
       "wave": 0
     },
     {
       "key": "2026-05-28-rag-replacement:task:4:05950916c679:review",
-      "stage": "review",
+      "title": "[review] #4 Roll the new score into the wiki dump (depends on #1, #3)",
       "assignee": "reviewer",
       "parents": [
         "2026-05-28-rag-replacement:task:4:05950916c679:impl"
       ],
-      "branch": null,
-      "workspace": "worktree",
       "tenant": "2026-05-28-rag-replacement",
-      "priority": null,
-      "skills": [],
-      "body_sha": "cdb7348eb9cb",
-      "model": null
+      "workspace": "worktree",
+      "stage": "review",
+      "body_sha": "f37f8dde1c9a"
     },
     {
       "key": "2026-05-28-rag-replacement:task:4:05950916c679:integrate",
-      "stage": "integrate",
+      "title": "[integrate] #4 Roll the new score into the wiki dump (depends on #1, #3)",
       "assignee": "integrator",
       "parents": [
         "2026-05-28-rag-replacement:task:4:05950916c679:review"
       ],
-      "branch": null,
-      "workspace": "worktree",
       "tenant": "2026-05-28-rag-replacement",
-      "priority": null,
-      "skills": [],
-      "body_sha": "9644312e5de5",
-      "model": null
+      "workspace": "worktree",
+      "stage": "integrate",
+      "body_sha": "f2974fb1a724"
     }
   ]
 }

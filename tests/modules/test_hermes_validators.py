@@ -67,3 +67,52 @@ def test_smell_when_component_absent_from_map():
     tasks = [Task(number=1, title="t", component="ghost", touches=("x.py",))]
     smells = validators.ownership_smells(tasks, ComponentMap({}))
     assert len(smells) == 1 and "no owned paths" in smells[0]
+
+
+# --------------------------------------------------------------------------- #
+# verify_touches (execution-time audit)                                        #
+# --------------------------------------------------------------------------- #
+def test_verify_touches_empty_when_all_declared():
+    declared = ["src/a.py", "src/b.rs"]
+    actual = ["src/a.py", "src/b.rs"]
+    assert validators.verify_touches(declared, actual) == []
+
+
+def test_verify_touches_flags_undeclared_files():
+    declared = ["src/a.py"]
+    actual = ["src/a.py", "Cargo.toml", "src/c.rs"]
+    result = validators.verify_touches(declared, actual)
+    assert result == ["Cargo.toml", "src/c.rs"]
+
+
+def test_verify_touches_ok_when_actual_is_subset_of_declared():
+    declared = ["src/a.py", "src/b.py", "src/c.py"]
+    actual = ["src/a.py"]
+    assert validators.verify_touches(declared, actual) == []
+
+
+# --------------------------------------------------------------------------- #
+# touches_overlap_warnings (undeclared contract duplication)                    #
+# --------------------------------------------------------------------------- #
+def test_no_overlap_warning_when_single_task_touches_path():
+    tasks = [Task(number=1, title="t", touches=("src/a.py",))]
+    assert validators.touches_overlap_warnings(tasks) == []
+
+
+def test_overlap_warning_when_two_tasks_share_path_no_contract():
+    tasks = [
+        Task(number=1, title="t1", touches=("src/shared.py",)),
+        Task(number=2, title="t2", touches=("src/shared.py",)),
+    ]
+    warnings = validators.touches_overlap_warnings(tasks)
+    assert len(warnings) == 1 and "no shared contract" in warnings[0]
+
+
+def test_no_overlap_warning_when_contract_declared():
+    tasks = [
+        Task(number=1, title="t1", touches=("src/shared.py",),
+             produces_contracts=("Shared",)),
+        Task(number=2, title="t2", touches=("src/shared.py",),
+             uses_contracts=("Shared",)),
+    ]
+    assert validators.touches_overlap_warnings(tasks) == []

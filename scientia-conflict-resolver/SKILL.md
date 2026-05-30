@@ -48,6 +48,17 @@ Always — and only — on an **integrate** task that hit a conflict. The integr
 has reassigned it to you and left a comment naming the two sides. You are not an
 implementer and not a reviewer; do not write new features or re-review scope.
 
+## Critical: worktree directories are recycled
+
+Worktree directories (`$HERMES_KANBAN_WORKSPACE`) are **recycled** by the
+dispatcher when a task completes. Reading from a worktree path at time T may
+return a **different task's code** than the one that occupied it at time T-1.
+
+**Always read code from git branch references, not filesystem paths.** Use
+`git show <branch>:<path>` or `git diff <base>..<branch>` instead of `cat` or
+file reads from the worktree. The branch name (`<change-id>/task-N`) is the
+stable, deterministic identifier — it is never recycled.
+
 ## What you are given
 
 Call `kanban_show()` first (no args — it reads `$HERMES_KANBAN_TASK`). From its
@@ -96,17 +107,26 @@ out on trunk. You have full git access there.
 
 1. `kanban_show()` — read the card, the integrator's comment (the two branch
    heads), the scenarios/ADRs/contracts, both handoffs, and any prior attempt.
+   Also read the `<!-- declared-touches: ... -->` and `<!-- emit-metadata: ... -->`
+   comments for the base_sha and wave context.
 2. **Reproduce the conflict.** `cd $HERMES_KANBAN_WORKSPACE`; record trunk's SHA;
    attempt the merge (`git merge <branch>` or rebase as the integrator did).
    Enumerate the conflicted files.
-3. **Classify** the conflict against the rubric below — this decides RESOLVE vs
+   - **If the merge succeeds cleanly** (exit 0, no conflict markers), the
+     integrator's conflict was a **false positive**. Skip to step 6 with
+     `resolution_kind: false-positive-conflict`.
+3. **Verify touches.** Before resolving, compare each side's actual edits
+   against its declared `<!-- declared-touches: ... -->`. Run
+   `git diff --name-only <base_sha>..<branch_head>` for each side. Flag any
+   undeclared files in your resolution notes — these are collision-risk signals.
+4. **Classify** the conflict against the rubric below — this decides RESOLVE vs
    ESCALATE *before* you touch code.
-4. **If ESCALATE** → `git merge --abort`, then `kanban_block(...)` with the
+5. **If ESCALATE** → `git merge --abort`, then `kanban_block(...)` with the
    required reason format. Stop.
-5. **If RESOLVE** → reconcile each conflicted hunk per the playbook, staying
+6. **If RESOLVE** → reconcile each conflicted hunk per the playbook, staying
    inside both tasks' `touches` ∪ their component's owned paths. `git add` the
    resolved files. Do **not** commit yet.
-6. **Verify the merged tree.** Re-run *both* handoffs' `verification` commands and
+7. **Verify the merged tree.** Re-run *both* handoffs' `verification` commands and
    the scenario tests. All must pass.
    - Green → commit the merge to trunk, then `kanban_complete(...)`.
    - Red after up to `max_resolution_attempts` (2) genuine attempts, and not a
@@ -189,7 +209,7 @@ Only after the merged tree is committed to trunk and all verification is green:
 kanban_complete(
   summary="<one line: what you reconciled and that both scenarios pass>",
   metadata={
-    "resolution_kind": "merge-both | conform-to-adr | superset | textual",
+    "resolution_kind": "merge-both | conform-to-adr | superset | textual | false-positive-conflict",
     "conflicting_branches": ["<change-id>/task-A @ <sha>", "<change-id>/task-B @ <sha>"],
     "conflicted_files": ["<paths that had conflict markers>"],
     "changed_files": ["<paths you edited to reconcile>"],

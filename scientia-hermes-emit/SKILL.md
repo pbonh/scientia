@@ -47,21 +47,27 @@ clean preflight. Absent a `hermes:` config block, do not activate at all.
    `conflict_prevention`). Pass `adr_contracts` = the set of contract names
    ratified by an **accepted** ADR (read the ADR statuses; this is the only place
    acceptance is resolved, keeping `conflict.ratify_contracts` pure).
-4. **Build the plan.** `plan = scientia.hermes.plan.build_plan(cid, tasks, c4,
-   comp_map, contracts, routing, options)`. This raises `ContractError` (an
-   unpinned `uses-contract`) or `CycleError` (a dependency/wave cycle) — surface
-   either verbatim and halt.
-5. **Validate.** `scientia.hermes.validators.validate_plan(plan,
+4. **Read the trunk base SHA.** Run `git rev-parse HEAD` in the project root
+   to capture the current trunk commit. Pass it as `base_sha` to
+   `build_plan` so each impl/single card carries a pinned branch point —
+   preventing lineage divergence when trunk advances between emit and dispatch.
+5. **Build the plan.** `plan = scientia.hermes.plan.build_plan(cid, tasks, c4,
+   comp_map, contracts, routing, options, base_sha=base_sha)`. This raises
+   `ContractError` (an unpinned `uses-contract`) or `CycleError` (a
+   dependency/wave cycle) — surface either verbatim and halt.
+6. **Validate.** `scientia.hermes.validators.validate_plan(plan,
    known_profiles=...)` and `validate_routing(...)`; surface
    `ownership_smells(tasks, comp_map)` as warnings (a `touches` outside its
-   component is a smell, not a hard stop). Run
+   component is a smell, not a hard stop). Also surface
+   `touches_overlap_warnings(tasks)` — tasks sharing a touched path with no
+   shared contract are at risk of independent type invention. Run
    `scientia.hermes.preflight.check(plan, ...)` and refuse on any error.
-6. **Apply.** `scientia.hermes.apply.apply(plan, dry_run=False,
+7. **Apply.** `scientia.hermes.apply.apply(plan, dry_run=False,
    backend=..., on_supersede=...)`. It is the single writer: REST-first,
    ledger-idempotent (skips keys already created), captures ids, archives
    superseded cards, and writes `hermes/emit-ledger.json`. Show a dry-run diff
    first when the operator wants one (`dry_run=True`).
-7. **Report the diff.** Use `scientia.hermes.ledger.diff(old, plan)` to report
+8. **Report the diff.** Use `scientia.hermes.ledger.diff(old, plan)` to report
    added / changed (re-keyed → archived) / removed cards.
 
 ## Card bodies & handoff

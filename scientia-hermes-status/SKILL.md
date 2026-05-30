@@ -39,8 +39,15 @@ what the `conflict-resolver` escalated.
    (a genuine spec contradiction, unratified-contract divergence, or
    verification that would not go green) **with its reason** — this is the only
    place a human is asked to act.
-6. **Report drift.** A ledger id absent from the board (or a board card with no
+6. **Detect green self-blocks.** An impl card with `status=blocked` whose
+   reason contains "review-required" and whose handoff metadata shows all tests
+   passing is a **green self-block** — redundant given the dedicated review
+   stage. Recommend `unblock` rather than surfacing it as an escalation.
+7. **Report drift.** A ledger id absent from the board (or a board card with no
    ledger entry) is reported as drift to reconcile (re-emit).
+8. **Warn about worktree recycling.** Note that worktree directories are
+   recycled by the dispatcher; code analysis should use git branch references
+   (`git show <branch>:<path>`) rather than filesystem reads.
 
 ## Decision rules
 

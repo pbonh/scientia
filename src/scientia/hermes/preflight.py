@@ -36,6 +36,7 @@ from scientia.hermes.plan import EmitPlan
 __all__ = ["PreflightResult", "check"]
 
 _LOOPBACK_HOSTS = {"127.0.0.1", "localhost", "::1", ""}
+_DASHBOARD_DEFAULT_PORT = 9119
 
 
 @dataclass(frozen=True)
@@ -48,6 +49,15 @@ class PreflightResult:
 def _default_gateway_probe(host: str, port: int) -> bool:
     try:
         with socket.create_connection((host or "127.0.0.1", port), timeout=1.5):
+            return True
+    except OSError:
+        return False
+
+
+def _default_dashboard_probe(port: int = _DASHBOARD_DEFAULT_PORT) -> bool:
+    """Probe whether the Hermes dashboard is listening on its default port."""
+    try:
+        with socket.create_connection(("127.0.0.1", port), timeout=1.5):
             return True
     except OSError:
         return False
@@ -113,18 +123,32 @@ def check(
                     "backend cannot reach the board"
                 )
             else:
+                # Board-scoped dispatch recommendation (friction point #6)
+                board_slug = plan.board or "<board-slug>"
                 warnings.append(
-                    "backend=cli: ensure a dispatcher is running (the gateway "
-                    "service, or a `hermes kanban dispatch` loop) or ready cards "
-                    "will sit forever — the CLI create itself cannot dispatch them"
+                    "backend=cli: ensure a dispatcher is running — use "
+                    f"`hermes kanban --board {board_slug} daemon --interval 60` "
+                    f"for board-scoped dispatch rather than the gateway's "
+                    f"embedded dispatcher (which is board-unscoped and may "
+                    f"spawn workers on unrelated boards)"
                 )
         else:
             probe = gateway_probe or _default_gateway_probe
             if not probe(host, port):
-                errors.append(
-                    f"Hermes gateway not reachable at {host}:{port}; start it "
-                    f"(`hermes gateway start`) or ready tasks will sit forever"
-                )
+                # Dashboard port mismatch diagnostic (friction point #6)
+                dashboard_probe = _default_dashboard_probe
+                if dashboard_probe():
+                    errors.append(
+                        f"Hermes gateway not reachable at {host}:{port}, but the "
+                        f"dashboard IS running on port {_DASHBOARD_DEFAULT_PORT}. "
+                        f"Start with `hermes dashboard --port {port}` or update "
+                        f"`rest_base` to http://127.0.0.1:{_DASHBOARD_DEFAULT_PORT}/api/plugins/kanban"
+                    )
+                else:
+                    errors.append(
+                        f"Hermes gateway not reachable at {host}:{port}; start it "
+                        f"(`hermes gateway start`) or ready tasks will sit forever"
+                    )
 
     # Model config gate: every card with a ProfileModel that names an api_key_env
     # must find that variable set in the environment.

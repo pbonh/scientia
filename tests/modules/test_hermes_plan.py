@@ -64,7 +64,7 @@ def _project(plan):
         }
 
     def card(c):
-        return {
+        d = {
             "key": c.key,
             "stage": c.stage,
             "assignee": c.assignee,
@@ -77,6 +77,11 @@ def _project(plan):
             "body_sha": _body_sha(c.body),
             "model": _model_dict(c.model),
         }
+        if c.base_sha is not None:
+            d["base_sha"] = c.base_sha
+        if c.wave is not None:
+            d["wave"] = c.wave
+        return d
     return {
         "change_id": plan.change_id,
         "board": plan.board,
@@ -198,6 +203,44 @@ def test_per_task_routing_overrides_assignee():
                       PlanOptions(conflict_prevention=False, emit_epic=False))
     impl = next(c for c in plan.cards if c.stage == "impl")
     assert impl.assignee == "specialist"
+
+
+def test_base_sha_pinned_in_impl_cards():
+    tasks = parse.parse_tasks("- [ ] **1.** a <!-- traces-spec: c#s -->\n")
+    routing = Routing(
+        default_implementer="implementer", default_reviewer="reviewer",
+        default_integrator="integrator", resolver="conflict-resolver",
+    )
+    plan = build_plan(CID, tasks, [], parse.ComponentMap({}), [], routing,
+                      PlanOptions(conflict_prevention=False, emit_epic=False),
+                      base_sha="abc123")
+    impl = next(c for c in plan.cards if c.stage == "impl")
+    review = next(c for c in plan.cards if c.stage == "review")
+    integrate = next(c for c in plan.cards if c.stage == "integrate")
+    assert impl.base_sha == "abc123"
+    assert review.base_sha is None
+    assert integrate.base_sha is None
+    assert "abc123" in impl.body  # base_sha is inlined in instructions
+
+
+def test_wave_set_on_impl_cards_when_prevention_on():
+    tasks = [
+        parse.Task(number=1, title="a", touches=("src/x.py",)),
+        parse.Task(number=2, title="b", touches=("src/x.py",)),
+        parse.Task(number=3, title="c", touches=("src/x.py",)),
+    ]
+    routing = Routing(
+        default_implementer="implementer", default_reviewer="reviewer",
+        default_integrator="integrator", resolver="conflict-resolver",
+    )
+    plan = build_plan(CID, tasks, [], parse.ComponentMap({}), [], routing,
+                      PlanOptions(emit_epic=False))
+    impls = [c for c in plan.cards if c.stage == "impl"]
+    waves = {c.key: c.wave for c in impls}
+    # With max_parallel=2 and 3 tasks touching the same file,
+    # tasks 1 and 2 are wave 0, task 3 is wave 1.
+    assert all(w is not None for w in waves.values())
+    assert list(sorted(waves.values())) == [0, 0, 1]
 
 
 # --------------------------------------------------------------------------- #

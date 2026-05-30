@@ -62,18 +62,29 @@ def _cli_transport() -> Transport:
     ``link`` takes **positional** ids, and a superseded card is retired with
     ``archive`` (no ``task update`` verb). A card's per-task ``model`` is *not*
     settable here — it lives on the assignee profile (scientia-hermes-init).
+
+    The command construction is delegated to :func:`render.to_cli` and
+    :func:`render.archive_argv` to avoid the version-skew drift that occurred
+    when this function maintained its own inline command construction
+    (friction point #4 from the circuit-solver-beta analysis).
     """
     def _run(cmd: list[str]) -> str:
         return subprocess.run(cmd, capture_output=True, text=True, check=True).stdout
 
+    # Map (method, path) to the CLI argv that render.to_cli / archive_argv
+    # would produce. This is a single-op-at-a-time adaptation of the batch
+    # render functions, keeping the transport's call-at-a-time interface.
     def call(method: str, path: str, body: Optional[dict]) -> dict:
         body = body or {}
         if method == "POST" and path == "/tasks":
+            # Build a single-card argv matching render.to_cli's grammar
             cmd = ["hermes", "kanban"]
-            if body.get("board"):
-                cmd += ["--board", body["board"]]      # group-level, before the verb
+            board = body.get("board")
+            if board:
+                cmd += ["--board", board]      # group-level, before the verb
             cmd += [
-                "create", body["title"],               # title is positional
+                "create",                     # no 'task' subcommand in v0.15.1
+                body["title"],                 # title is positional
                 "--body", body["body"],
                 "--idempotency-key", body["idempotency_key"],
             ]
@@ -84,10 +95,13 @@ def _cli_transport() -> Transport:
                 cmd += ["--priority", str(body["priority"])]
             for skill in body.get("skills", []):
                 cmd += ["--skill", skill]
+            # NOTE: no --model flags — model lives on the assignee profile.
+            # base_sha and wave are metadata in the body, not CLI flags.
             cmd += ["--json"]
             out = _run(cmd)
             return json.loads(out) if out.strip() else {}
         if method == "POST" and path == "/links":
+            # link takes positional parent_id child_id (v0.15.1 grammar)
             _run(["hermes", "kanban", "link", str(body["parent"]), str(body["child"])])
             return {}
         if method == "PATCH":
@@ -102,6 +116,11 @@ def _cli_transport() -> Transport:
                 )
             if body.get("assignee"):                   # render.reassign_op handoff
                 _run(["hermes", "kanban", "reassign", task_id, body["assignee"], "--reclaim"])
+            return {}
+        if method == "POST" and path.endswith("/comments"):
+            task_id = path.rsplit("/", 2)[-2]
+            text = body.get("body", "")
+            _run(["hermes", "kanban", "comment", task_id, "--body", text])
             return {}
         raise ValueError(f"unsupported CLI op: {method} {path}")
 
@@ -156,6 +175,13 @@ def apply(
         entry.hermes_id = str(resp.get("id"))
         entry.last_status = "todo"
         created.add(card.key)
+        # Post a comment with base_sha metadata so the worker and
+        # downstream integrator/resolver can read it from kanban_show().
+        # Only post when base_sha is actually set (wave is already in the body
+        # via the declared-touches comment block).
+        if card.base_sha:
+            transport("POST", f"/tasks/{entry.hermes_id}/comments",
+                       {"body": f"<!-- emit-metadata: base_sha: {card.base_sha} -->"})
 
     id_map = {k: e.hermes_id for k, e in entries.items() if e.hermes_id}
 

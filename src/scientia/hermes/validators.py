@@ -20,7 +20,7 @@ from scientia.hermes import idempotency
 from scientia.hermes.parse import ComponentMap, Task
 from scientia.hermes.plan import EmitPlan, ProfileModel, Routing
 
-__all__ = ["validate_plan", "validate_routing", "ownership_smells"]
+__all__ = ["validate_plan", "validate_routing", "ownership_smells", "verify_touches"]
 
 
 def _all_cards(plan: EmitPlan):
@@ -167,3 +167,62 @@ def ownership_smells(tasks: Sequence[Task], comp_map: ComponentMap) -> list[str]
                     f"{task.component!r} owned paths {list(globs)}"
                 )
     return smells
+
+
+def verify_touches(declared: Sequence[str], actual: Sequence[str]) -> list[str]:
+    """Compare declared touches against actual edited files (post-impl audit).
+
+    Returns a list of undeclared files — files that appear in ``actual`` but
+    not in ``declared``. This is the execution-time counterpart of
+    :func:`ownership_smells`: ownership_smells runs at emit time against
+    *declared* paths; verify_touches runs at integrate time against *actual*
+    git diffs.
+
+    A non-empty result means the implementer edited files outside its declared
+    touch-set, which is a drift signal and a collision risk. The integrator
+    should flag these in the handoff metadata; the conflict-resolver should
+    treat undeclared-edit collisions as higher-priority than declared ones.
+    """
+    declared_set = set(declared)
+    undeclared: list[str] = []
+    for path in sorted(actual):
+        if path not in declared_set:
+            undeclared.append(path)
+    return undeclared
+
+
+def touches_overlap_warnings(tasks: Sequence[Task]) -> list[str]:
+    """Warn when two tasks touch the same path with no shared contract declared.
+
+    This catches undeclared contract duplication (e.g. two tasks independently
+    defining the same type without a produces-contract/uses-contract marker).
+    It complements :func:`ownership_smells` which checks against the Component
+    Map; this checks across tasks for overlapping touches with no contract
+    coordination.
+    """
+    path_to_tasks: dict[str, list[int]] = defaultdict(list)
+    for task in tasks:
+        for p in task.touches:
+            path_to_tasks[p].append(task.number)
+
+    warnings: list[str] = []
+    for path, task_nums in sorted(path_to_tasks.items()):
+        if len(task_nums) < 2:
+            continue
+        # Check whether any of the sharing tasks produces/uses a contract
+        # for this path
+        has_contract = False
+        for num in task_nums:
+            t = next((t for t in tasks if t.number == num), None)
+            if t is None:
+                continue
+            if t.produces_contracts or t.uses_contracts:
+                has_contract = True
+                break
+        if not has_contract:
+            warnings.append(
+                f"tasks {task_nums} all touch {path!r} with no shared contract "
+                f"declared — consider adding produces-contract/uses-contract "
+                f"markers to prevent independent type invention"
+            )
+    return warnings

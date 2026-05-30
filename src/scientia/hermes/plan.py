@@ -139,6 +139,8 @@ class CardSpec:
     priority: Optional[int]
     stage: str  # "impl" | "review" | "integrate" | "epic" | "single"
     model: Optional[ProfileModel] = None
+    base_sha: Optional[str] = None   # trunk HEAD at emit time — prevents lineage divergence
+    wave: Optional[int] = None       # file-collision wave index — scheduling hint + audit trail
 
 
 @dataclass(frozen=True)
@@ -178,12 +180,25 @@ def _trace_block(task: Task) -> str:
     return "\n".join(lines) if lines else "- _(no traceability markers)_"
 
 
-def _instructions(task: Task, stage: str, resolver: str) -> str:
+def _instructions(task: Task, stage: str, resolver: str, base_sha: Optional[str] = None) -> str:
     if stage in ("impl", "single"):
         base = (
             f"Implement task #{task.number} — {task.title} — in an isolated "
             f"workspace. Write the code and its tests; keep edits within the "
             f"task's touched paths."
+        )
+        if base_sha:
+            base += f" Branch from commit `{base_sha}`. If that commit is no longer on trunk, rebase onto current trunk but verify your touches still apply."
+        base += (
+            "\n\n## Completion Criteria\n"
+            "Complete (do NOT block for review) when ALL of:\n"
+            "- Every spec scenario traced above has a passing test\n"
+            "- `cargo test` passes (or the verification command in the handoff)\n"
+            "- `cargo clippy` passes with no warnings\n"
+            "- All edits are within the declared touches paths\n\n"
+            "Do NOT self-block for review — the next card in this pipeline is a "
+            "dedicated reviewer. If you have a design concern, note it in the "
+            "handoff `residual_risk` field and complete anyway."
         )
         if stage == "single":
             base += (
@@ -200,26 +215,37 @@ def _instructions(task: Task, stage: str, resolver: str) -> str:
     if stage == "integrate":
         return (
             f"Merge the approved worker branch for task #{task.number} to trunk. "
-            f"If the merge is clean, complete. If it conflicts, **reassign this "
-            f"card to the `{resolver}` profile** and comment the two branch heads "
-            f"— do not block for a human."
+            f"**Attempt `git merge <branch>` first.** Only if git reports "
+            f"conflicts (exit code 1, conflict markers in files) do you reassign "
+            f"this card to the `{resolver}` profile and comment the two branch "
+            f"heads — do not block for a human. File overlap alone is NOT a "
+            f"conflict; you must actually attempt the merge.\n\n"
+            f"Before completing, verify the worker's actual edits match its "
+            f"declared touches: run `git diff --name-only <base>..<branch_head>` "
+            f"and flag any file outside the touches set as an undeclared edit "
+            f"in your handoff metadata."
         )
     return task.title
 
 
-def compose_body(task: Task, stage: str, change_id: str, resolver: str) -> str:
+def compose_body(task: Task, stage: str, change_id: str, resolver: str, base_sha: Optional[str] = None) -> str:
     """Render one work card's body from the shared templates (byte-stable)."""
     handoff = templates.render("hermes-handoff")
-    return templates.render(
+    body = templates.render(
         "hermes-card",
         title=task.title,
         change_id=change_id,
         number=task.number,
         stage=stage,
         traces=_trace_block(task),
-        instructions=_instructions(task, stage, resolver),
+        instructions=_instructions(task, stage, resolver, base_sha=base_sha),
         handoff=handoff,
     )
+    # Append touches and wave metadata as a machine-readable block for the
+    # integrator and conflict-resolver to audit against.
+    if task.touches:
+        body += f"\n<!-- declared-touches: {', '.join(task.touches)} -->\n"
+    return body
 
 
 def compose_epic_body(
@@ -312,12 +338,18 @@ def build_plan(
     contracts: Sequence[Contract],
     routing: Routing,
     options: PlanOptions,
+    base_sha: Optional[str] = None,
 ) -> EmitPlan:
     """Expand tasks into a fully-wired, topologically-ordered :class:`EmitPlan`.
 
     Raises :class:`scientia.hermes.conflict.ContractError` if prevention is on and
     a consumed contract is unpinned, and :class:`CycleError` if the edges form a
     cycle. Pure: no I/O beyond reading the packaged body templates.
+
+    ``base_sha`` is the trunk HEAD at emit time. When provided, it is embedded
+    in each impl/single card body so workers branch from a known commit rather
+    than whatever HEAD is current at dispatch time — preventing lineage
+    divergence (friction point #1 from the circuit-solver-beta analysis).
     """
     tasks = list(tasks)
     by_number = {t.number: t for t in tasks}
@@ -370,10 +402,11 @@ def build_plan(
         )
 
         def mk(stage: str, assignee: str, parents: tuple[str, ...], br: Optional[str]) -> CardSpec:
+            task_wave = waves.get(task.number) if options.conflict_prevention else None
             return CardSpec(
                 key=tkey(task.number, stage),
                 title=f"[{stage}] #{task.number} {task.title}",
-                body=compose_body(task, stage, change_id, routing.resolver),
+                body=compose_body(task, stage, change_id, routing.resolver, base_sha=base_sha),
                 assignee=assignee,
                 parents=parents,
                 tenant=routing.tenant,
@@ -383,6 +416,8 @@ def build_plan(
                 priority=options.priority,
                 stage=stage,
                 model=_model_for(assignee),
+                base_sha=base_sha if stage in ("impl", "single") else None,
+                wave=task_wave if stage in ("impl", "single") else None,
             )
 
         if single:

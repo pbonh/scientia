@@ -80,6 +80,10 @@ def task_payload(card: CardSpec, board: Optional[str] = None) -> dict:
         payload["priority"] = card.priority
     if card.model is not None:
         payload["model"] = _model_payload(card.model)
+    if card.base_sha is not None:
+        payload["base_sha"] = card.base_sha
+    if card.wave is not None:
+        payload["wave"] = card.wave
     return payload
 
 
