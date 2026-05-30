@@ -334,7 +334,10 @@ class TestRenderModelPayload:
         assert "model" in impl_create["json"]
         assert impl_create["json"]["model"]["provider"] == "fireworks"
 
-    def test_cli_argv_includes_model_flags(self):
+    def test_cli_argv_drops_model_flags_model_is_profile_level(self):
+        # v0.15.1 `hermes kanban create` has NO model flags. A card's model rides
+        # on the assignee *profile* (provisioned by scientia-hermes-init), so the
+        # CLI backend must not try to set it per-task — even when one is present.
         routing = Routing(
             default_implementer="implementer",
             default_reviewer="reviewer",
@@ -345,20 +348,11 @@ class TestRenderModelPayload:
         plan = _plan_with_models(routing)
         id_for = lambda k: "H0"
         argv = render.to_cli(plan, id_for)
-        impl_argv = next(
-            a for a in argv
-            if a[:4] == ["hermes", "kanban", "task", "create"]
-            and "--model-provider" in a
-        )
-        idx = impl_argv.index("--model-provider")
-        assert impl_argv[idx + 1] == "fireworks"
-        assert "--model-name" in impl_argv
-        idx_name = impl_argv.index("--model-name")
-        assert impl_argv[idx_name + 1] == "accounts/fireworks/models/llama-v3p1-70b-instruct"
-        assert "--model-base-url" in impl_argv
-        assert "--model-api-key-env" in impl_argv
-        assert "--model-temperature" in impl_argv
-        assert "--model-max-tokens" in impl_argv
+        creates = [a for a in argv if "create" in a and "--idempotency-key" in a]
+        assert creates
+        for a in creates:
+            assert not any(tok.startswith("--model") for tok in a)
+        # REST, by contrast, still carries the model (see test_rest_ops_include_model_in_create).
 
     def test_cli_argv_omits_model_flags_when_no_model(self):
         routing = Routing(
@@ -371,8 +365,8 @@ class TestRenderModelPayload:
         id_for = lambda k: "H0"
         argv = render.to_cli(plan, id_for)
         for a in argv:
-            if a[:4] == ["hermes", "kanban", "task", "create"]:
-                assert "--model-provider" not in a
+            if "create" in a and "--idempotency-key" in a:
+                assert not any(tok.startswith("--model") for tok in a)
 
 
 # --------------------------------------------------------------------------- #

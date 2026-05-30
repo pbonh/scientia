@@ -2,10 +2,16 @@
 
 Emit must never silently no-op, so this gate runs first. It is one of the only
 two impure modules in the layer (the other is :mod:`.apply`): it inspects the
-``dir:`` workspaces, refuses a non-loopback ``rest_base`` (the kanban routes are
-unauthenticated — §12), and — when ``require_gateway`` — probes that the Hermes
-gateway is actually accepting connections, since ``ready`` tasks sit forever
-without it.
+``dir:`` workspaces, refuses a non-loopback ``rest_base`` for the ``rest``
+backend (those kanban routes are unauthenticated — §12), and — when
+``require_gateway`` — checks that the board is actually reachable, since
+``ready`` tasks sit forever otherwise.
+
+The reachability check is **backend-aware**. For ``backend="rest"`` it probes
+the gateway's HTTP port. For ``backend="cli"`` there is no HTTP endpoint (plain
+``hermes gateway`` is the *messaging* gateway and serves no kanban API), so it
+instead verifies the ``hermes`` CLI is on PATH and warns that a dispatcher (the
+gateway service or a ``hermes kanban dispatch`` loop) must be running.
 
 When profiles carry a :class:`~scientia.hermes.plan.ProfileModel`, preflight
 also checks that every referenced ``api_key_env`` variable is actually present
@@ -19,6 +25,7 @@ this module with no Hermes present.
 from __future__ import annotations
 
 import os
+import shutil
 import socket
 from dataclasses import dataclass, field
 from typing import Callable, Optional
@@ -46,14 +53,20 @@ def _default_gateway_probe(host: str, port: int) -> bool:
         return False
 
 
+def _default_cli_probe() -> bool:
+    return shutil.which("hermes") is not None
+
+
 def check(
     plan: EmitPlan,
     *,
     require_gateway: bool = True,
+    backend: str = "rest",
     rest_base: str = "http://127.0.0.1:8787/api/plugins/kanban",
     known_profiles: Optional[set[str]] = None,
     allow_remote: bool = False,
     gateway_probe: Optional[Callable[[str, int], bool]] = None,
+    cli_probe: Optional[Callable[[], bool]] = None,
 ) -> PreflightResult:
     """Validate the runtime can actually accept this plan's mutations."""
     errors: list[str] = []
@@ -62,7 +75,9 @@ def check(
     split = urlsplit(rest_base)
     host = split.hostname or ""
     port = split.port or (443 if split.scheme == "https" else 80)
-    if host not in _LOOPBACK_HOSTS and not allow_remote:
+    # The loopback guard only applies to the REST backend — `rest_base` is unused
+    # for the CLI backend, which talks to the SQLite board directly.
+    if backend == "rest" and host not in _LOOPBACK_HOSTS and not allow_remote:
         errors.append(
             f"rest_base host {host!r} is not loopback; the kanban routes are "
             f"unauthenticated — keep it on 127.0.0.1 or pass allow_remote"
@@ -90,12 +105,26 @@ def check(
             )
 
     if require_gateway:
-        probe = gateway_probe or _default_gateway_probe
-        if not probe(host, port):
-            errors.append(
-                f"Hermes gateway not reachable at {host}:{port}; start it "
-                f"(`hermes gateway start`) or ready tasks will sit forever"
-            )
+        if backend == "cli":
+            # No HTTP endpoint to probe; the board is reached through the CLI.
+            if not (cli_probe or _default_cli_probe)():
+                errors.append(
+                    "the `hermes` CLI is not on PATH; install Hermes or the cli "
+                    "backend cannot reach the board"
+                )
+            else:
+                warnings.append(
+                    "backend=cli: ensure a dispatcher is running (the gateway "
+                    "service, or a `hermes kanban dispatch` loop) or ready cards "
+                    "will sit forever — the CLI create itself cannot dispatch them"
+                )
+        else:
+            probe = gateway_probe or _default_gateway_probe
+            if not probe(host, port):
+                errors.append(
+                    f"Hermes gateway not reachable at {host}:{port}; start it "
+                    f"(`hermes gateway start`) or ready tasks will sit forever"
+                )
 
     # Model config gate: every card with a ProfileModel that names an api_key_env
     # must find that variable set in the environment.

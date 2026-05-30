@@ -56,12 +56,44 @@ def test_epic_create_has_no_assignee_field_when_unassigned():
     assert "assignee" not in epic_op["json"]  # epic is informational, not dispatched
 
 
+def _cli_creates(argv):
+    return [a for a in argv if "create" in a and "--idempotency-key" in a]
+
+
 def test_to_cli_mirrors_rest_with_kanban_argv():
     plan = _plan(pipeline="single", emit_epic=False)
     argv = render.to_cli(plan, _id_for(plan))
-    creates = [a for a in argv if a[:4] == ["hermes", "kanban", "task", "create"]]
+    creates = _cli_creates(argv)
     assert len(creates) == 4
     assert all("--idempotency-key" in a for a in creates)
+
+
+def test_to_cli_uses_v0_15_grammar_not_the_legacy_task_subcommand():
+    # v0.15.1: `hermes kanban create <title> …` — no `task` subcommand, title is
+    # positional, and there is no `--status` flag on create.
+    plan = _plan(pipeline="single", emit_epic=False)
+    creates = _cli_creates(render.to_cli(plan, _id_for(plan)))
+    for cmd in creates:
+        assert cmd[:3] == ["hermes", "kanban", "create"]   # no "task" token
+        assert "task" not in cmd
+        assert "--title" not in cmd and "--status" not in cmd
+        assert cmd[3].startswith("[")                      # positional title (e.g. "[single] #1 …")
+        assert "--model-provider" not in cmd               # model is profile-level on the CLI backend
+
+
+def test_to_cli_links_are_positional():
+    plan = _plan()  # impl-review-integrate -> intra-task parent edges exist
+    links = [a for a in render.to_cli(plan, _id_for(plan)) if a[:3] == ["hermes", "kanban", "link"]]
+    assert links, "expected at least one link op"
+    for cmd in links:
+        assert len(cmd) == 5 and "--parent" not in cmd and "--child" not in cmd
+
+
+def test_archive_argv_uses_archive_verb():
+    assert render.archive_argv(["t_1", "t_2"]) == [
+        ["hermes", "kanban", "archive", "t_1"],
+        ["hermes", "kanban", "archive", "t_2"],
+    ]
 
 
 def test_reassign_op_targets_the_resolver_not_a_block():
@@ -106,9 +138,9 @@ def test_resolved_board_is_threaded_into_payloads_and_argv():
     assert task_payload(next(iter(plan.cards)), plan.board)["board"] == "acme-service"
     rest_creates = [o["json"] for o in to_rest(plan, _id_for(plan)) if o["path"] == "/tasks"]
     assert rest_creates and all(p["board"] == "acme-service" for p in rest_creates)
-    cli_creates = [
-        a for a in to_cli(plan, _id_for(plan)) if a[:4] == ["hermes", "kanban", "task", "create"]
-    ]
+    cli_creates = _cli_creates(to_cli(plan, _id_for(plan)))
     assert cli_creates and all(
         "--board" in a and a[a.index("--board") + 1] == "acme-service" for a in cli_creates
     )
+    # --board is group-level: it precedes the `create` verb, not after it.
+    assert all(a.index("--board") < a.index("create") for a in cli_creates)

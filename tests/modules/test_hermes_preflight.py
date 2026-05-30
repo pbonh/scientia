@@ -71,3 +71,30 @@ def test_refuses_unknown_assignee_against_provisioned_profiles():
         _plan(), require_gateway=False, known_profiles={"implementer"}
     )
     assert not res.ok and any("scientia-hermes-init" in e for e in res.errors)
+
+
+def test_cli_backend_checks_cli_presence_not_http_port():
+    # No HTTP probe for the cli backend; a present CLI passes with a dispatcher warning.
+    res = preflight.check(
+        _plan(), backend="cli", require_gateway=True,
+        gateway_probe=_DOWN,            # would fail the rest backend; ignored for cli
+        cli_probe=lambda: True,
+    )
+    assert res.ok and res.errors == []
+    assert any("dispatcher" in w for w in res.warnings)
+
+
+def test_cli_backend_errors_when_hermes_cli_absent():
+    res = preflight.check(
+        _plan(), backend="cli", require_gateway=True, cli_probe=lambda: False
+    )
+    assert not res.ok and any("`hermes` CLI" in e for e in res.errors)
+
+
+def test_cli_backend_ignores_non_loopback_rest_base():
+    # rest_base is unused for the cli backend, so the loopback guard must not fire.
+    res = preflight.check(
+        _plan(), backend="cli", require_gateway=False,
+        rest_base="http://10.0.0.5:8787/api/plugins/kanban", cli_probe=lambda: True,
+    )
+    assert res.ok and res.errors == []

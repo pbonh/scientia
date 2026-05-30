@@ -74,8 +74,13 @@ hermes:
   pipeline: impl-review-integrate   # impl-review-integrate | single
   emit_epic: true
   on_supersede: archive       # archive | leave
-  backend: rest               # rest | cli
-  rest_base: http://127.0.0.1:8787/api/plugins/kanban   # loopback dashboard plugin
+  backend: cli                # cli | rest. `cli` drives the board through the
+                              # `hermes kanban` CLI (SQLite-direct); use it unless
+                              # a Hermes build actually serves the kanban REST
+                              # plugin at rest_base. Plain `hermes gateway` is the
+                              # *messaging* gateway and exposes no kanban HTTP API,
+                              # so `rest` connection-refuses (or 401s) on such hosts.
+  rest_base: http://127.0.0.1:8787/api/plugins/kanban   # only used when backend: rest
   conflict_prevention: true   # C4-derived waves + shared-contract ratification
   max_parallel_per_file_group: 2   # wave cap on tasks sharing a touched path
   preflight:

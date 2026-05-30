@@ -51,37 +51,57 @@ def _rest_transport(rest_base: str) -> Transport:
 
 
 def _cli_transport() -> Transport:
+    """Map the abstract REST-shaped ops onto the v0.15.1 ``hermes kanban`` CLI.
+
+    This is the board's only API on hosts whose Hermes serves no kanban REST
+    plugin (the common case: plain ``hermes gateway`` is the *messaging* gateway).
+    The grammar drifted from the seam's REST shape — see
+    :func:`scientia.hermes.render.to_cli`: the verb is ``create`` (no ``task``
+    subcommand) with a **positional** title, ``--board`` is group-level (before
+    the verb), there is no ``--status`` on ``create`` (a card defaults to ready),
+    ``link`` takes **positional** ids, and a superseded card is retired with
+    ``archive`` (no ``task update`` verb). A card's per-task ``model`` is *not*
+    settable here — it lives on the assignee profile (scientia-hermes-init).
+    """
+    def _run(cmd: list[str]) -> str:
+        return subprocess.run(cmd, capture_output=True, text=True, check=True).stdout
+
     def call(method: str, path: str, body: Optional[dict]) -> dict:
         body = body or {}
         if method == "POST" and path == "/tasks":
-            cmd = [
-                "hermes", "kanban", "task", "create", "--json",
+            cmd = ["hermes", "kanban"]
+            if body.get("board"):
+                cmd += ["--board", body["board"]]      # group-level, before the verb
+            cmd += [
+                "create", body["title"],               # title is positional
+                "--body", body["body"],
                 "--idempotency-key", body["idempotency_key"],
-                "--title", body["title"], "--body", body["body"],
-                "--status", body.get("status", "todo"),
             ]
-            for opt in ("board", "assignee", "tenant", "workspace", "branch"):
+            for opt in ("assignee", "tenant", "workspace", "branch"):
                 if body.get(opt):
                     cmd += [f"--{opt}", body[opt]]
+            if body.get("priority") is not None:
+                cmd += ["--priority", str(body["priority"])]
             for skill in body.get("skills", []):
                 cmd += ["--skill", skill]
-            out = subprocess.run(cmd, capture_output=True, text=True, check=True).stdout
+            cmd += ["--json"]
+            out = _run(cmd)
             return json.loads(out) if out.strip() else {}
         if method == "POST" and path == "/links":
-            subprocess.run(
-                ["hermes", "kanban", "link", "--parent", str(body["parent"]),
-                 "--child", str(body["child"])],
-                capture_output=True, text=True, check=True,
-            )
+            _run(["hermes", "kanban", "link", str(body["parent"]), str(body["child"])])
             return {}
         if method == "PATCH":
             task_id = path.rsplit("/", 1)[-1]
-            cmd = ["hermes", "kanban", "task", "update", task_id]
-            if "status" in body:
-                cmd += ["--status", body["status"]]
-            if "assignee" in body:
-                cmd += ["--assignee", body["assignee"]]
-            subprocess.run(cmd, capture_output=True, text=True, check=True)
+            status = body.get("status")
+            if status == "archived":
+                _run(["hermes", "kanban", "archive", task_id])
+            elif status is not None:
+                raise ValueError(
+                    f"no v0.15.1 CLI mapping for status {status!r}; use a "
+                    f"dedicated verb (block/complete/promote/unblock)"
+                )
+            if body.get("assignee"):                   # render.reassign_op handoff
+                _run(["hermes", "kanban", "reassign", task_id, body["assignee"], "--reclaim"])
             return {}
         raise ValueError(f"unsupported CLI op: {method} {path}")
 
