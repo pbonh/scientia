@@ -48,9 +48,17 @@ roster and writing each profile's description); the package
    calls the same resolver, so init and emit never disagree on the name. Create
    that board if it is absent.
 4. **Ensure every profile exists**, including `conflict-resolver` for the
-   three-stage pipeline. The `conflict-resolver` profile body ships as
-   `scientia-conflict-resolver/SKILL.md` — install/register it as the Hermes
-   profile of that name.
+   three-stage pipeline. Deploy each profile the **same way** with
+   `scripts/provision_profile.sh <name> <full-model-id> [body.md] [description]`
+   — the canonical, idempotent recipe: plain `hermes profile create` (bundled
+   skills, incl. the auto-loaded `kanban-worker`), a Fireworks custom-provider
+   `config.yaml` with the role's `model.default`, an optional repo-tracked SOUL
+   body, a description, a `~/.local/bin` wrapper, and btrfs NOCOW. The
+   `conflict-resolver` body ships as `scientia-conflict-resolver/SKILL.md`; the
+   `implementer`/`reviewer`/`integrator` personas are init-authored (no body
+   file). **Never** symlink `scientia-*` skills into a profile — the dispatcher
+   auto-loads `kanban-worker`, and per-profile scientia skill symlinks only
+   dangle when the shared skills source moves.
 5. **Run preflight.** Call `scientia.hermes.preflight.check(plan_or_probe,
    require_gateway=..., rest_base=..., known_profiles=...)`. Refuse on a
    non-loopback `rest_base` (the kanban routes are unauthenticated) and on a
@@ -77,6 +85,11 @@ roster and writing each profile's description); the package
   `pipeline: impl-review-integrate`; its absence is a refuse, not a warning.
 - Keep profile descriptions short and role-scoped; no secrets in any profile
   body (plaintext SQLite, rendered in the dashboard).
+- Provision every profile through `scripts/provision_profile.sh` so the roster
+  stays uniform (same skill set, config shape, wrapper). The kanban worker's
+  `kanban_*` lifecycle tools come from the dispatcher-injected bundled
+  `kanban-worker`, resolved from `<profile>/skills/devops/kanban-worker` — never
+  from a `scientia-kanban-worker` symlink.
 
 ## Acceptance behavior
 
