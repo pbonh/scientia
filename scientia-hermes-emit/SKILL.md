@@ -91,13 +91,19 @@ clean preflight. Absent a `hermes:` config block, do not activate at all.
      trunk. This is a silent failure — no error is raised at emit time.
    - `backend=cli` preflight will warn about this; surface the warning verbatim.
 
-9. **Apply.** `scientia.hermes.apply.apply(plan, dry_run=False,
-   backend=..., on_supersede=...)`. It is the single writer: REST-first,
-   ledger-idempotent (skips keys already created), captures ids, archives
-   superseded cards, and writes `hermes/emit-ledger.json`. Show a dry-run diff
-   first when the operator wants one (`dry_run=True`).
-10. **Report the diff.** Use `scientia.hermes.ledger.diff(old, plan)` to report
-    added / changed (re-keyed → archived) / removed cards.
+9. **Snapshot the prior ledger, then apply.** Capture `old =
+   scientia.hermes.ledger.load(<change-id>)` **before** applying — `apply`
+   overwrites `hermes/emit-ledger.json`, so a snapshot taken afterward would
+   show zero added cards (friction F-11). Then run
+   `scientia.hermes.apply.apply(plan, dry_run=False, backend=...,
+   on_supersede=...)`. It is the single writer: REST-first, ledger-idempotent
+   (skips keys already created), captures ids, archives superseded cards, and
+   writes the ledger. Show a dry-run diff first when the operator wants one
+   (`dry_run=True`).
+10. **Report the diff.** Use `scientia.hermes.ledger.diff(old, plan)` — with the
+    `old` snapshot captured in step 9 **before** apply — to report added /
+    changed (re-keyed → archived) / removed cards. A report of `added=0` after a
+    successful emit means the snapshot was taken too late (friction F-11).
 
 ## Profile naming convention
 

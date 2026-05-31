@@ -52,11 +52,21 @@ def _model_payload(model: ProfileModel) -> dict:
     return payload
 
 
-def task_payload(card: CardSpec, board: Optional[str] = None) -> dict:
+def task_payload(
+    card: CardSpec,
+    board: Optional[str] = None,
+    parent_ids: Optional[Iterable[str]] = None,
+) -> dict:
     """The ``POST /tasks`` JSON body for one card (idempotency key = card key).
 
     ``board`` is the plan-level board slug (:attr:`EmitPlan.board`) the card lands
     on; when set it is sent so each project's cards stay on their own board.
+
+    ``parent_ids`` are the live hermes ids of the card's parents, resolved by the
+    caller. When given, they are sent at **create** time so the card is created
+    already ``blocked`` behind its dependencies — the dispatcher cannot claim it
+    before its gate exists (friction F-1). Omitting them (or passing an empty
+    iterable) keeps the field off the payload.
     """
     payload: dict = {
         "title": card.title,
@@ -66,6 +76,10 @@ def task_payload(card: CardSpec, board: Optional[str] = None) -> dict:
     }
     if board:
         payload["board"] = board
+    if parent_ids is not None:
+        ids = [str(p) for p in parent_ids if p]
+        if ids:
+            payload["parents"] = ids
     if card.assignee:
         payload["assignee"] = card.assignee
     if card.tenant:
@@ -93,21 +107,27 @@ def _all_cards(plan: EmitPlan) -> list[CardSpec]:
 
 
 def to_rest(plan: EmitPlan, id_for: IdFor) -> list[dict]:
-    """REST ops: all creates (epic first, then topo-ordered cards), then links."""
+    """REST ops: one create per card (epic first, then topo-ordered), each
+    carrying its resolved parent ids so the card is created already gated.
+
+    Parents are wired **at create** rather than in a trailing ``/links`` pass so
+    a child is never momentarily dispatchable before its dependency edge exists
+    (friction F-1). The only edge a create-time link cannot express — rewiring an
+    *already-existing* child onto a *newly re-keyed* parent — is handled by the
+    live writer :func:`scientia.hermes.apply.apply`, which is the only place that
+    knows which cards pre-existed this run.
+    """
     ops: list[dict] = []
     for card in _all_cards(plan):
+        parent_ids = [id_for(pk) for pk in card.parents]
         ops.append(
-            {"method": "POST", "path": "/tasks", "json": task_payload(card, plan.board), "key": card.key}
+            {
+                "method": "POST",
+                "path": "/tasks",
+                "json": task_payload(card, plan.board, parent_ids=parent_ids),
+                "key": card.key,
+            }
         )
-    for card in _all_cards(plan):
-        for parent_key in card.parents:
-            ops.append(
-                {
-                    "method": "POST",
-                    "path": "/links",
-                    "json": {"parent": id_for(parent_key), "child": id_for(card.key)},
-                }
-            )
     return ops
 
 
@@ -127,10 +147,13 @@ def to_cli(plan: EmitPlan, id_for: IdFor) -> list[list[str]]:
       assignee profile that scientia-hermes-init provisions. preflight still
       validates the model's ``api_key_env`` independently of the backend.
 
-    Links stay a separate, **positional** pass (``hermes kanban link <p> <c>``)
-    rather than ``--parent`` at create time, because the apply writer must also
-    rewire an *existing* child onto a *newly re-keyed* parent (rewire-on-rekey),
-    which a create-time edge cannot express.
+    Parents are passed with ``--parent <id>`` **at create time** (v0.15.x) so the
+    card is created already ``blocked`` behind its dependencies and the dispatcher
+    cannot claim it before its gate exists (friction F-1). There is no trailing
+    ``link`` pass here: the one edge a create-time link cannot express — rewiring
+    an *already-existing* child onto a *newly re-keyed* parent (rewire-on-rekey) —
+    is emitted by the live writer :func:`scientia.hermes.apply.apply`, which alone
+    knows which cards pre-existed this run.
     """
     argv: list[list[str]] = []
     for card in _all_cards(plan):
@@ -154,13 +177,12 @@ def to_cli(plan: EmitPlan, id_for: IdFor) -> list[list[str]]:
             cmd += ["--priority", str(card.priority)]
         for skill in card.skills:
             cmd += ["--skill", skill]
+        for parent_key in card.parents:     # gate at create (friction F-1)
+            pid = id_for(parent_key)
+            if pid:
+                cmd += ["--parent", str(pid)]
         cmd += ["--json"]
         argv.append(cmd)
-    for card in _all_cards(plan):
-        for parent_key in card.parents:
-            argv.append(
-                ["hermes", "kanban", "link", str(id_for(parent_key)), str(id_for(card.key))]
-            )
     return argv
 
 

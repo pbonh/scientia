@@ -56,6 +56,20 @@ Each scenario's Given/When/Then is acceptance truth. Your review checks:
 scenario, the ADR, or the contract that is violated. Do not return for
 stylistic preferences — only for spec/ADR/contract/touches violations.
 
+## How to return a verdict — complete, never block
+
+Return your verdict by **completing** the card, never by blocking it:
+
+- Approve → `kanban_complete(summary="<what you verified>")`.
+- Reject (including a wrong or missing implementation branch — old content,
+  absent files, wrong base) → `kanban_complete(summary="REJECTED: <reason>",
+  metadata={{"verdict": "rejected"}})`.
+
+Do NOT call `kanban_block()`. There is no automatic re-dispatch from a
+reviewer-blocked card, so a block stalls the pipeline permanently; a completion
+carrying a `REJECTED:` summary lets the integrator and conflict-resolver stages
+handle the downstream failure (friction F-7).
+
 ## Worktree Safety
 
 Worktree directories are recycled by the dispatcher. Always read code from git

@@ -59,6 +59,17 @@ return a **different task's code** than the one that occupied it at time T-1.
 file reads from the worktree. The branch name (`<change-id>/task-N`) is the
 stable, deterministic identifier — it is never recycled.
 
+## Critical: merge into the named trunk branch
+
+The trunk branch for this project is named in the `## Project Context` section
+that `scientia-hermes-init` appended to this SOUL. **Check out that branch
+explicitly before resolving** (`git checkout <trunk-branch>`); NEVER infer the
+trunk from your worktree's current directory. In a multi-worktree checkout the
+worktree's parent may belong to a different board's branch, and merging there
+produces false conflicts and a wrong-repo merge (friction F-3). If the Project
+Context section is absent (pre-0.3 profiles), use the trunk SHA the integrator
+recorded in its comment as your merge target.
+
 ## What you are given
 
 Call `kanban_show()` first (no args — it reads `$HERMES_KANBAN_TASK`). From its

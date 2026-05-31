@@ -4,8 +4,11 @@ Everything upstream of here is pure; ``apply`` is the one place that mutates the
 board. It is REST-first (CLI is a fallback backend) and *ledger-idempotent*: in
 topological order it creates each card only when the ledger does not already map
 its key to a live id (the idempotency pre-check, AC-3/AC-15), captures the new
-id, wires parent links for the cards it created, archives superseded cards
-(``on_supersede: archive``, AC-4), and writes the updated ledger.
+id, wires each card's parents **at create time** so it starts ``blocked`` and is
+never momentarily dispatchable before its gate exists (friction F-1), emits an
+explicit rewire link only for the rewire-on-rekey case (an existing child whose
+parent was re-keyed this run), archives superseded cards (``on_supersede:
+archive``, AC-4), and writes the updated ledger.
 
 The HTTP/CLI call is funnelled through a single ``transport(method, path, body)``
 seam, which the integration suite replaces with a recording stub so the whole
@@ -95,6 +98,8 @@ def _cli_transport() -> Transport:
                 cmd += ["--priority", str(body["priority"])]
             for skill in body.get("skills", []):
                 cmd += ["--skill", skill]
+            for pid in body.get("parents", []):   # gate at create (friction F-1)
+                cmd += ["--parent", str(pid)]
             # NOTE: no --model flags — model lives on the assignee profile.
             # base_sha and wave are metadata in the body, not CLI flags.
             cmd += ["--json"]
@@ -167,11 +172,21 @@ def apply(
             entry.last_status = old[key].last_status
 
     created: set[str] = set()
-    for card in cards:  # topological order (epic first)
+    for card in cards:  # topological order (epic first) — parents precede children
         entry = entries[card.key]
         if entry.hermes_id:  # ledger pre-check -> idempotent skip
             continue
-        resp = transport("POST", "/tasks", render.task_payload(card, plan.board))
+        # Resolve parent ids now: topological order + carried-over ids guarantee
+        # every parent already has a live id. Passing them at create makes the
+        # card start `blocked`, so the dispatcher cannot claim it before its
+        # dependency gate exists (friction F-1).
+        parent_ids = [
+            entries[pk].hermes_id for pk in card.parents if entries[pk].hermes_id
+        ]
+        resp = transport(
+            "POST", "/tasks",
+            render.task_payload(card, plan.board, parent_ids=parent_ids),
+        )
         entry.hermes_id = str(resp.get("id"))
         entry.last_status = "todo"
         created.add(card.key)
@@ -185,15 +200,19 @@ def apply(
 
     id_map = {k: e.hermes_id for k, e in entries.items() if e.hermes_id}
 
-    # Wire a parent link whenever *either* endpoint was created this run: a fresh
-    # child needs all its up-edges, and a re-keyed parent needs its existing
-    # children rewired onto the new card. An unchanged re-emit creates nothing,
-    # so no links are sent (AC-3). (Stale links to an archived old parent are a
-    # drift signal scientia-hermes-status reports; R1 defers full re-wiring.)
+    # Freshly created cards already had their parents wired at create time (above),
+    # so the only link op still needed is rewire-on-rekey: an *existing* child
+    # (not created this run) whose parent was *re-keyed* (created this run). A
+    # create-time edge cannot express that, so emit an explicit link. An unchanged
+    # re-emit creates nothing and rewires nothing (AC-3). (Stale links to an
+    # archived old parent are a drift signal scientia-hermes-status reports; R1
+    # defers full re-wiring.)
     for card in cards:
+        if card.key in created:
+            continue  # parents already wired at create
         for parent_key in card.parents:
-            if card.key not in created and parent_key not in created:
-                continue
+            if parent_key not in created:
+                continue  # parent unchanged -> existing link still valid
             parent_id = id_map.get(parent_key)
             child_id = id_map.get(card.key)
             if parent_id and child_id:

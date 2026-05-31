@@ -67,7 +67,12 @@ def test_first_emit_creates_every_card_and_wires_links(root):
     links = t.of("POST", "/links")
     assert len(creates) == 13  # epic + 12 stage cards
     cards = [plan.epic] + list(plan.cards)
-    assert len(links) == sum(len(c.parents) for c in cards)
+    # parents are wired AT CREATE (friction F-1): on a fresh emit every card is
+    # created, so each parent edge rides on a create payload and the separate
+    # /links pass is empty.
+    assert links == []
+    wired = sum(len(c[2].get("parents", [])) for c in creates)
+    assert wired == sum(len(c.parents) for c in cards)
     # every card got an id, recorded in the ledger
     saved = ledger.load(CID)
     assert len(saved) == 13

@@ -62,6 +62,7 @@ def test_soul_templates_render_with_all_vars(monkeypatch):
     common_vars = dict(
         project_name="Circuit Solver Beta",
         prefix_display="Circuit Solver Beta ",
+        trunk_branch="main",
         architecture="```mermaid\nC4Container\n```",
         component_map="- confidence: src/scientia/confidence.py",
         shared_contracts="- confidence.EffectiveScore — owner: confidence",

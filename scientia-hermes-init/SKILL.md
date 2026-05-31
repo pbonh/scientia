@@ -89,11 +89,19 @@ boards can have different execution profiles on the same Hermes install.
    | `shared_contracts` | Shared Contracts section from `design.md` |
    | `accepted_adrs` | List of accepted ADRs with Y-statements from `adrs/` |
    | `spec_scenarios` | Key spec scenarios from `specs/` |
+   | `trunk_branch` | `hermes.trunk_branch` config; if empty, the repo's current branch (`git rev-parse --abbrev-ref HEAD`). **Required** by `soul-integrator` — render fails without it. |
+
+   **Resolve `trunk_branch` once** (config value, else the current git branch)
+   and pass it to the `soul-integrator` render. The integrator template names
+   the branch explicitly (a `## Critical: the trunk branch is <trunk_branch>`
+   section) so the integrator merges into the right branch and never infers
+   trunk from the daemon's cwd (friction F-3).
 
    For the `conflict-resolver`, copy `scientia-conflict-resolver/SKILL.md` as
    its SOUL.md (as before), but also append a `## Project Context` section
-   with the architecture, contracts, and ADRs so the resolver has the same
-   project grounding.
+   with the architecture, contracts, ADRs, **and the resolved `trunk_branch`**
+   so the resolver has the same project grounding and merges into the same
+   trunk the integrator does (friction F-3).
 
    Write each SOUL.md to a temp file under the change dir's `hermes/` subdirectory
    (`scientia.paths.hermes_dir(cid) / "souls" / "<prefixed-role>.md"`).

@@ -26,7 +26,7 @@ def _id_for(plan):
     return lambda k: table.get(k)
 
 
-def test_to_rest_creates_then_links_all_through_kanban_routes():
+def test_to_rest_creates_carry_parents_no_separate_link_pass():
     plan = _plan()
     ops = render.to_rest(plan, _id_for(plan))
     creates = [o for o in ops if o["path"] == "/tasks"]
@@ -35,18 +35,21 @@ def test_to_rest_creates_then_links_all_through_kanban_routes():
     assert len(creates) == 13
     # every create carries its key as the idempotency key (AC-15 idempotency seam)
     assert all(o["json"]["idempotency_key"] == o["key"] for o in creates)
-    # all creates precede all links
-    assert ops.index(creates[-1]) < ops.index(links[0])
-    # links reference resolved ids
-    assert all(isinstance(o["json"]["parent"], str) and isinstance(o["json"]["child"], str) for o in links)
+    # parents are wired AT CREATE (friction F-1) -> there is no /links pass
+    assert links == []
+    # a card with parents carries resolved string ids in its create payload
+    with_parents = [o for o in creates if o["json"].get("parents")]
+    assert with_parents
+    assert all(isinstance(p, str) for o in with_parents for p in o["json"]["parents"])
 
 
-def test_to_rest_link_count_matches_total_parent_edges():
+def test_to_rest_parent_count_matches_total_parent_edges():
     plan = _plan()
     cards = [plan.epic] + list(plan.cards) if plan.epic else list(plan.cards)
     expected = sum(len(c.parents) for c in cards)
-    links = [o for o in render.to_rest(plan, _id_for(plan)) if o["path"] == "/links"]
-    assert len(links) == expected
+    creates = [o for o in render.to_rest(plan, _id_for(plan)) if o["path"] == "/tasks"]
+    wired = sum(len(o["json"].get("parents", [])) for o in creates)
+    assert wired == expected
 
 
 def test_epic_create_has_no_assignee_field_when_unassigned():
@@ -81,12 +84,15 @@ def test_to_cli_uses_v0_15_grammar_not_the_legacy_task_subcommand():
         assert "--model-provider" not in cmd               # model is profile-level on the CLI backend
 
 
-def test_to_cli_links_are_positional():
+def test_to_cli_wires_parents_at_create_no_link_pass():
     plan = _plan()  # impl-review-integrate -> intra-task parent edges exist
-    links = [a for a in render.to_cli(plan, _id_for(plan)) if a[:3] == ["hermes", "kanban", "link"]]
-    assert links, "expected at least one link op"
-    for cmd in links:
-        assert len(cmd) == 5 and "--parent" not in cmd and "--child" not in cmd
+    argv = render.to_cli(plan, _id_for(plan))
+    # parents ride on create (friction F-1); there is no separate `link` pass
+    assert not any(a[:3] == ["hermes", "kanban", "link"] for a in argv)
+    cards = [plan.epic] + list(plan.cards) if plan.epic else list(plan.cards)
+    expected = sum(len(c.parents) for c in cards)
+    parent_flags = sum(a.count("--parent") for a in argv)
+    assert parent_flags == expected and expected > 0
 
 
 def test_archive_argv_uses_archive_verb():
