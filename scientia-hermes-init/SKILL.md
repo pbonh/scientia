@@ -98,7 +98,20 @@ boards can have different execution profiles on the same Hermes install.
    Write each SOUL.md to a temp file under the change dir's `hermes/` subdirectory
    (`scientia.paths.hermes_dir(cid) / "souls" / "<prefixed-role>.md"`).
 
-6. **Ensure the board exists.** Create the resolved board if it is absent.
+6. **Ensure the board exists.** Create the resolved board if it is absent using
+   `hermes kanban boards create <slug>` (v0.15.1 path — **not** `hermes board
+   create <slug>`, which is the wrong subcommand tree and exits with code 2).
+   Check existence first: `hermes kanban boards list | grep <slug>`.
+
+   **CRITICAL — verify the working directory before this step.** The board
+   name defaults to `slugify(basename(cwd))` when `hermes.board` is empty.
+   Verify you are in the correct project root before resolving:
+   ```python
+   import scientia.hermes.board as b
+   print(b.resolve_board(configured_board))  # must match the intended board slug
+   ```
+   If the slug is wrong, `cd` to the correct project root (or set `SCIENTIA_ROOT`)
+   before continuing — a wrong cwd sends all cards to the wrong board.
 
 7. **Ensure every prefixed profile exists**, including the prefixed
    conflict-resolver for the three-stage pipeline. Deploy each profile the
@@ -129,15 +142,34 @@ boards can have different execution profiles on the same Hermes install.
    auto-loads `kanban-worker`, and per-profile scientia skill symlinks only
    dangle when the shared skills source moves.
 
-8. **Run preflight.** Call `scientia.hermes.preflight.check(plan_or_probe,
-   require_gateway=..., rest_base=..., known_profiles=...)`. Refuse on a
-   non-loopback `rest_base` (the kanban routes are unauthenticated) and on a
-   `dir:` workspace that is not absolute. Pass `known_profiles` as the set of
-   prefixed profile names.
+8. **Run preflight.** For a gateway-only early probe (before any plan exists),
+   use `scientia.hermes.preflight.gateway_check(backend=..., rest_base=...,
+   board=<resolved_board>)` — this is safe to call before step 6. For the
+   full validation after the board and profiles exist, call
+   `scientia.hermes.preflight.check(plan, require_gateway=..., rest_base=...,
+   known_profiles=...)` with a real `EmitPlan` (passing `None` is also
+   accepted for a gateway-only check, but `gateway_check` is more explicit).
+   Refuse on a non-loopback `rest_base` (the kanban routes are unauthenticated)
+   and on a `dir:` workspace that is not absolute. Pass `known_profiles` as the
+   set of prefixed profile names.
 
-9. **Report.** Return the structured `PreflightResult` (ok / errors / warnings).
-   On any error, **halt with the exact remediation** (see the table) — do not
-   proceed to emit.
+9. **Report dispatcher startup instructions.** After a successful preflight,
+   if `backend=cli`, output the exact command to start the dispatcher **and**
+   the required working directory:
+   ```
+   cd <project-root>   # MUST be the project repo — worktrees are created relative to cwd
+   hermes kanban --board <slug> daemon --interval 60
+   ```
+   The daemon creates worker worktrees under `.worktrees/` relative to its cwd.
+   Starting from the wrong repo directory runs all workers in the wrong repo's
+   worktrees (which produces false merge conflicts and broken integrations).
+   `scientia.paths.project_root()` or `$SCIENTIA_ROOT` is the authoritative
+   project root — show it explicitly so the operator cannot accidentally start
+   from a sibling repo.
+
+10. **Report.** Return the structured `PreflightResult` (ok / errors / warnings).
+    On any error, **halt with the exact remediation** (see the table) — do not
+    proceed to emit.
 
 ## Profile naming convention
 

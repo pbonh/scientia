@@ -75,13 +75,29 @@ clean preflight. Absent a `hermes:` config block, do not activate at all.
    `scientia.hermes.preflight.check(plan, ...)` and refuse on any error.
    Pass `known_profiles` as the set of prefixed profile names that init
    provisioned.
-8. **Apply.** `scientia.hermes.apply.apply(plan, dry_run=False,
+8. **Verify dispatcher CWD before apply.** Before writing any cards, confirm
+   the dispatcher (daemon) will run from the correct project root:
+   - Show: `python3 -c "import scientia.paths as p; print(p.project_root())"` — this is the
+     required cwd for the daemon.
+   - The daemon must be started as:
+     ```
+     cd <project-root>   # CRITICAL: worktrees are created relative to cwd
+     hermes kanban --board <resolved-board> daemon --interval 60
+     ```
+   - If the daemon is already running, verify it was started from the correct
+     directory. A daemon started from the wrong repo (e.g. a sibling project)
+     creates all worker worktrees in that repo's `.worktrees/` directory, which
+     causes false merge conflicts when the integrator merges against the wrong
+     trunk. This is a silent failure — no error is raised at emit time.
+   - `backend=cli` preflight will warn about this; surface the warning verbatim.
+
+9. **Apply.** `scientia.hermes.apply.apply(plan, dry_run=False,
    backend=..., on_supersede=...)`. It is the single writer: REST-first,
    ledger-idempotent (skips keys already created), captures ids, archives
    superseded cards, and writes `hermes/emit-ledger.json`. Show a dry-run diff
    first when the operator wants one (`dry_run=True`).
-9. **Report the diff.** Use `scientia.hermes.ledger.diff(old, plan)` to report
-   added / changed (re-keyed → archived) / removed cards.
+10. **Report the diff.** Use `scientia.hermes.ledger.diff(old, plan)` to report
+    added / changed (re-keyed → archived) / removed cards.
 
 ## Profile naming convention
 

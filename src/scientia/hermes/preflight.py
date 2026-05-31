@@ -33,7 +33,7 @@ from urllib.parse import urlsplit
 
 from scientia.hermes.plan import EmitPlan
 
-__all__ = ["PreflightResult", "check"]
+__all__ = ["PreflightResult", "check", "gateway_check"]
 
 _LOOPBACK_HOSTS = {"127.0.0.1", "localhost", "::1", ""}
 _DASHBOARD_DEFAULT_PORT = 9119
@@ -68,7 +68,7 @@ def _default_cli_probe() -> bool:
 
 
 def check(
-    plan: EmitPlan,
+    plan: Optional[EmitPlan],
     *,
     require_gateway: bool = True,
     backend: str = "rest",
@@ -78,7 +78,12 @@ def check(
     gateway_probe: Optional[Callable[[str, int], bool]] = None,
     cli_probe: Optional[Callable[[], bool]] = None,
 ) -> PreflightResult:
-    """Validate the runtime can actually accept this plan's mutations."""
+    """Validate the runtime can actually accept this plan's mutations.
+
+    ``plan`` may be ``None`` for a gateway-only reachability probe — all
+    card-level checks (workspace, assignee, profile, model) are skipped.
+    Pass a real ``EmitPlan`` before emit to get the full validation.
+    """
     errors: list[str] = []
     warnings: list[str] = []
 
@@ -93,7 +98,9 @@ def check(
             f"unauthenticated — keep it on 127.0.0.1 or pass allow_remote"
         )
 
-    cards = ([plan.epic] + list(plan.cards)) if plan.epic is not None else list(plan.cards)
+    cards = []
+    if plan is not None:
+        cards = ([plan.epic] + list(plan.cards)) if plan.epic is not None else list(plan.cards)
     for card in cards:
         if card.workspace.startswith("dir:"):
             target = card.workspace[len("dir:"):]
@@ -124,13 +131,18 @@ def check(
                 )
             else:
                 # Board-scoped dispatch recommendation (friction point #6)
-                board_slug = plan.board or "<board-slug>"
+                board_slug = (plan.board if plan is not None else None) or "<board-slug>"
                 warnings.append(
                     "backend=cli: ensure a dispatcher is running — use "
                     f"`hermes kanban --board {board_slug} daemon --interval 60` "
                     f"for board-scoped dispatch rather than the gateway's "
                     f"embedded dispatcher (which is board-unscoped and may "
-                    f"spawn workers on unrelated boards)"
+                    f"spawn workers on unrelated boards). "
+                    f"CRITICAL: run this command from the project root directory — "
+                    f"Hermes creates worker worktrees relative to the daemon's cwd; "
+                    f"starting from the wrong repo lands all workers in that repo's "
+                    f"worktrees instead (use `cd <project-root>` first or set "
+                    f"`SCIENTIA_ROOT` before starting the daemon)"
                 )
         else:
             probe = gateway_probe or _default_gateway_probe
@@ -178,3 +190,37 @@ def check(
                     )
 
     return PreflightResult(ok=not errors, errors=errors, warnings=warnings)
+
+
+def gateway_check(
+    *,
+    backend: str = "rest",
+    rest_base: str = "http://127.0.0.1:8787/api/plugins/kanban",
+    board: Optional[str] = None,
+    allow_remote: bool = False,
+    gateway_probe: Optional[Callable[[str, int], bool]] = None,
+    cli_probe: Optional[Callable[[], bool]] = None,
+) -> PreflightResult:
+    """Convenience wrapper: run only gateway and CLI reachability checks.
+
+    Use this during ``scientia-hermes-init`` before a plan exists — it runs
+    the same backend-aware gateway checks as :func:`check` but skips all
+    card-level validation (workspace, assignee, profile, model).
+    """
+    from scientia.hermes.plan import EmitPlan  # local import avoids cycle
+
+    dummy = EmitPlan(
+        change_id="__probe__",
+        board=board or "",
+        epic=None,
+        cards=(),
+    )
+    return check(
+        dummy,
+        require_gateway=True,
+        backend=backend,
+        rest_base=rest_base,
+        allow_remote=allow_remote,
+        gateway_probe=gateway_probe,
+        cli_probe=cli_probe,
+    )
