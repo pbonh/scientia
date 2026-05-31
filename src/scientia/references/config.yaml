@@ -69,6 +69,11 @@ modes:
 hermes:
   board: ""                   # "" = the current project name (slugified project dir,
                               #      via scientia.hermes.board.resolve_board); else an explicit slug
+  # profile_prefix:           # ABSENT = use the board slug as prefix (automatic, zero-config);
+                              #      e.g. board "circuit-solver-beta" → profiles "circuit-solver-beta-implementer",
+                              #      "circuit-solver-beta-reviewer", etc. Set to a custom string to override
+                              #      the prefix. Set to "" (empty) to DISABLE prefixing and use bare role
+                              #      names ("implementer", "reviewer", …) for backward compatibility.
   tenant_strategy: change-id  # change-id | none
   workspace: worktree         # scratch | worktree | dir:<absolute-path>
   pipeline: impl-review-integrate   # impl-review-integrate | single

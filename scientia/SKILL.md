@@ -98,6 +98,12 @@ and `generate_tasks` stages also emit the gated ownership markers (Component Map
 Shared Contracts, per-task `component`/`touches`/`*-contract`), and
 `validate_design`/`validate_tasks` are called with `require_prevention=True`.
 
+Profiles are project-specific: `scientia-hermes-init` prefixes each profile
+name with the board slug (or a custom `profile_prefix`) and composes a
+project-specific SOUL.md for each role from the C4 architecture, ADRs,
+contracts, and spec scenarios. This ensures kanban agents stay on-task for
+this particular project rather than executing generically.
+
 ## Acceptance behavior
 
 - A failing stage halts the orchestrator with the validation errors reported.

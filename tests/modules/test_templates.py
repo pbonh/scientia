@@ -50,5 +50,26 @@ def test_render_to_file_is_idempotent(refs_root, tmp_path):
 def test_shipped_templates_all_resolve(monkeypatch):
     # With no project-local references/, the bundle's own templates resolve.
     monkeypatch.delenv("SCIENTIA_ROOT", raising=False)
-    for name in ("proposal", "grill", "gherkin-spec", "adr", "c4", "tasks", "wiki-page"):
+    for name in ("proposal", "grill", "gherkin-spec", "adr", "c4", "tasks", "wiki-page",
+                 "hermes-card", "hermes-handoff",
+                 "soul-implementer", "soul-reviewer", "soul-integrator"):
         assert templates.template_path(name).is_file()
+
+
+def test_soul_templates_render_with_all_vars(monkeypatch):
+    """Each SOUL template renders cleanly when all required variables are provided."""
+    monkeypatch.delenv("SCIENTIA_ROOT", raising=False)
+    common_vars = dict(
+        project_name="Circuit Solver Beta",
+        prefix_display="Circuit Solver Beta ",
+        architecture="```mermaid\nC4Container\n```",
+        component_map="- confidence: src/scientia/confidence.py",
+        shared_contracts="- confidence.EffectiveScore — owner: confidence",
+        accepted_adrs="- ADR-0003: confidence model",
+        spec_scenarios="### Scenario: contradiction-floor\nGiven ...",
+    )
+    for name in ("soul-implementer", "soul-reviewer", "soul-integrator"):
+        rendered = templates.render(name, **common_vars)
+        assert "Circuit Solver Beta" in rendered
+        assert "ADR-0003" in rendered
+        assert len(rendered) > 200  # not a stub

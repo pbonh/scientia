@@ -56,7 +56,7 @@ fully optional — absent the block, nothing here runs.
 
 | Skill | Phase |
 |-------|-------|
-| `scientia-hermes-init` | provision/validate the board, profiles, and gateway |
+| `scientia-hermes-init` | provision/validate the board, project-specific profiles, and gateway |
 | `scientia-hermes-emit` | emit cards + dependency links (REST-first, idempotent) |
 | `scientia-hermes-status` | read the board back and surface real escalations |
 | `scientia-conflict-resolver` | the Hermes *profile* that resolves integrate conflicts without a human |
@@ -65,6 +65,16 @@ Conflict robustness is the headline property: work is decomposed along C4
 component boundaries so collisions are *prevented* (file-collision waves +
 shared-contract ratification, in `scientia.hermes.conflict`), and the residue is
 *resolved* automatically by the `conflict-resolver` profile.
+
+**Project-specific profiles.** Each Hermes profile is automatically prefixed with
+the board slug (e.g. `circuit-solver-beta-implementer` instead of the generic
+`implementer`) and carries a SOUL.md system prompt that embeds the project's
+C4 architecture, accepted ADRs, shared contracts, and spec scenarios. No
+configuration is needed — the prefix is derived from the project name. Different
+boards on the same Hermes install can thus have different execution profiles —
+each grounded in its own project's architecture and constraints. Add
+`hermes.profile_prefix: ""` to the project's `references/config.yaml` to
+disable prefixing for backward compatibility with pre-0.3 setups.
 
 ## Layout
 

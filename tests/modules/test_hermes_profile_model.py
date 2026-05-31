@@ -663,6 +663,18 @@ class TestConfigYamlModels:
             assert model["provider"] == "fireworks", f"profile {name!r} should default to fireworks"
             assert model["model"] != "", f"profile {name!r} has empty model"
 
+    def test_config_yaml_profile_prefix_absent_by_default(self):
+        """The shipped config should NOT have profile_prefix set, so that
+        configured=None triggers automatic prefixing via the board slug."""
+        import yaml
+        config_path = Path(__file__).resolve().parent.parent.parent / "src" / "scientia" / "references" / "config.yaml"
+        cfg = yaml.safe_load(config_path.read_text())
+        assert "profile_prefix" not in cfg["hermes"], (
+            "profile_prefix should be absent from the shipped default so that "
+            "resolve_profile_prefix(None, ...) automatically uses the board slug. "
+            "Users opt OUT by adding profile_prefix: \"\" to their local config."
+        )
+
     def test_config_yaml_implementer_uses_larger_max_tokens(self):
         import yaml
         config_path = Path(__file__).resolve().parent.parent.parent / "src" / "scientia" / "references" / "config.yaml"

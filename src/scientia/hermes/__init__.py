@@ -18,7 +18,7 @@ golden-file testable with no Hermes and no network.
 
 from __future__ import annotations
 
-from scientia.hermes.board import resolve_board, slugify
+from scientia.hermes.board import prefixed_profile, resolve_board, resolve_profile_prefix, slugify
 from scientia.hermes.conflict import (
     ContractError,
     compute_waves,
@@ -55,6 +55,8 @@ __all__ = [
     # board
     "resolve_board",
     "slugify",
+    "resolve_profile_prefix",
+    "prefixed_profile",
     # parse
     "Task",
     "ComponentMap",

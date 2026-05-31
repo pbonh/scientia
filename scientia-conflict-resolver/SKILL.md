@@ -249,6 +249,24 @@ A human comments the decision and unblocks; your next run reads that comment in
 `kanban_show()` and resolves accordingly. Escalation is the exception — most
 conflicts resolve under the rubric above without a person.
 
+## Project-Specific Context
+
+When `scientia-hermes-init` provisions this profile, it appends a
+`## Project Context` section to your SOUL.md containing the project's C4
+architecture, Component Map, Shared Contracts, and accepted ADRs. This section
+is the project-specific grounding that keeps your resolution decisions aligned
+with the project's architecture — use it alongside the per-card inlined traces.
+
+If the `## Project Context` section is absent (pre-0.3 profiles), rely solely on
+the per-card inlined traces as before.
+
+## Re-provisioning
+
+If the project's architecture changes (new ADRs, updated contracts, changed
+component boundaries), re-run `scientia-hermes-init` to re-provision this
+profile with an updated SOUL.md. The old profile's config.yaml and skills are
+preserved; only the SOUL.md and description are updated.
+
 ## Liveness
 
 Call `kanban_heartbeat(note="...")` at each phase boundary (reproduced merge,

@@ -1,11 +1,11 @@
 ---
 name: scientia-hermes-status
-description: Reports change-level progress for a Hermes-emitted change and surfaces blocks. Reads the local emit-ledger plus the live board, maps every live card back to its scientia (task number, stage), summarizes impl/review/integrate progress, attaches the latest handoff, and lists any genuine escalations the conflict-resolver flagged with their reasons. Read-only. Activate to check on an emitted change or after a run to see what needs a human.
+description: Reports change-level progress for a Hermes-emitted change and surfaces blocks. Uses the same board and profile-prefix resolution as init/emit to correctly map prefixed profile names (e.g. circuit-solver-beta-implementer) back to their roles. Reads the local emit-ledger plus the live board, maps every live card back to its scientia (task number, stage), summarizes impl/review/integrate progress, attaches the latest handoff, and lists any genuine escalations the conflict-resolver flagged with their reasons. Read-only. Activate to check on an emitted change or after a run to see what needs a human.
 license: MIT
 compatibility: Requires the scientia Python package (pip install scientia); Python 3.10+; a local Hermes install with the Kanban feature
 metadata:
   stage: hermes-status
-  version: "0.2"
+  version: "0.3"
 ---
 
 # scientia-hermes-status
@@ -28,24 +28,29 @@ what the `conflict-resolver` escalated.
 
 ## Procedure
 
-1. **Load the ledger.** `entries = scientia.hermes.ledger.load(cid)`.
-2. **Read the board.** Fetch each `hermes_id`'s live status.
-3. **Map back.** For each live card, use `scientia.hermes.idempotency.parse_card_key(key)`
+1. **Resolve the board and profile prefix.** Use
+   `scientia.hermes.board.resolve_board` and `scientia.hermes.board.resolve_profile_prefix`
+   with the same `hermes:` config block that init and emit used, so profile
+   names are interpreted consistently. The prefixed conflict-resolver name is
+   `scientia.hermes.board.prefixed_profile(prefix, "conflict-resolver")`.
+2. **Load the ledger.** `entries = scientia.hermes.ledger.load(cid)`.
+3. **Read the board.** Fetch each `hermes_id`'s live status.
+4. **Map back.** For each live card, use `scientia.hermes.idempotency.parse_card_key(key)`
    (or the ledger entry) to recover its `(task_number, stage)`.
-4. **Summarize per task.** For each scientia task, report the state of its
+5. **Summarize per task.** For each scientia task, report the state of its
    `impl / review / integrate` chain and attach the latest `kanban_complete`
    handoff metadata (`changed_files`, `verification`, `branch_head`).
-5. **Surface escalations.** List any card the `conflict-resolver` `block`ed
-   (a genuine spec contradiction, unratified-contract divergence, or
-   verification that would not go green) **with its reason** — this is the only
-   place a human is asked to act.
-6. **Detect green self-blocks.** An impl card with `status=blocked` whose
+6. **Surface escalations.** List any card assigned to the prefixed
+   `conflict-resolver` profile that is `block`ed (a genuine spec contradiction,
+   unratified-contract divergence, or verification that would not go green)
+   **with its reason** — this is the only place a human is asked to act.
+7. **Detect green self-blocks.** An impl card with `status=blocked` whose
    reason contains "review-required" and whose handoff metadata shows all tests
    passing is a **green self-block** — redundant given the dedicated review
    stage. Recommend `unblock` rather than surfacing it as an escalation.
-7. **Report drift.** A ledger id absent from the board (or a board card with no
+8. **Report drift.** A ledger id absent from the board (or a board card with no
    ledger entry) is reported as drift to reconcile (re-emit).
-8. **Warn about worktree recycling.** Note that worktree directories are
+9. **Warn about worktree recycling.** Note that worktree directories are
    recycled by the dispatcher; code analysis should use git branch references
    (`git show <branch>:<path>`) rather than filesystem reads.
 
