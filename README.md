@@ -117,15 +117,19 @@ Skills are discovered from `~/.agents/skills`, and the `scientia` package must b
 importable by whatever runs the skills.
 
 ```bash
-# 1. Clone the skills directly into the skills root so they are discovered.
-git clone <this-repo> ~/.agents/skills
+# 1. Clone the skills into the skills root so they are discovered (safe to re-run).
+if [ ! -d ~/.agents/skills/scientia/.git ]; then
+    git clone <this-repo> ~/.agents/skills/scientia
+fi
 
 # 2. Install the supporting Python package EDITABLE (pip or uv).
 #    Use -e so a `git pull` updates the importable package in lockstep with the
 #    SKILL.md files it ships beside — a non-editable install freezes a copy and
 #    drifts stale (see "Keeping the package in sync" below).
-pip install -e ~/.agents/skills         # or:  uv pip install -e ~/.agents/skills
-#   networkx is an optional traversal extra:  pip install -e '~/.agents/skills[graph]'
+pip install -e ~/.agents/skills/scientia         # or:  uv pip install -e ~/.agents/skills/scientia
+#   On a PEP 668 externally-managed env (e.g. Homebrew Python), add
+#   --break-system-packages to the pip command above.
+#   networkx is an optional traversal extra:  pip install -e "$HOME/.agents/skills/scientia[graph]"
 
 # 3. Point the pipeline at your project (where sources/, wiki/, proposals/ live).
 export SCIENTIA_ROOT=/path/to/your/project
@@ -135,9 +139,12 @@ If you keep other skills in `~/.agents/skills`, clone this repo elsewhere and
 symlink the `scientia*` directories into the skills root instead:
 
 ```bash
-git clone <this-repo> ~/src/scientia
-ln -s ~/src/scientia/scientia* ~/.agents/skills/
+if [ ! -d ~/src/scientia/.git ]; then
+    git clone <this-repo> ~/src/scientia
+fi
+ln -sf ~/src/scientia/scientia* ~/.agents/skills/
 pip install -e ~/src/scientia
+#   Add --break-system-packages on a PEP 668 externally-managed env.
 ```
 
 ### Claude Code
@@ -148,16 +155,19 @@ enough because Claude expects each skill's `SKILL.md` to be one directory level
 below the skills root.
 
 ```bash
-# 1. Clone this repo anywhere you like.
-git clone <this-repo> ~/.agents/skills/scientia
+# 1. Clone this repo anywhere you like (safe to re-run).
+if [ ! -d ~/.agents/skills/scientia/.git ]; then
+    git clone <this-repo> ~/.agents/skills/scientia
+fi
 
 # 2. Symlink each individual skill directory into ~/.claude/skills/
 for dir in ~/.agents/skills/scientia/scientia*/; do
-  ln -s "$(realpath "$dir")" ~/.claude/skills/
+  ln -sf "$(realpath "$dir")" ~/.claude/skills/
 done
 
 # 3. Install the supporting Python package EDITABLE and set the project root.
 pip install -e ~/.agents/skills/scientia
+#   Add --break-system-packages on a PEP 668 externally-managed env.
 export SCIENTIA_ROOT=/path/to/your/project
 ```
 
@@ -182,10 +192,14 @@ Prevent it:
 ```bash
 # Always install editable so the import path IS the repo (no frozen copy):
 pip install -e ~/.agents/skills/scientia
+#   If `pip` refuses with an "externally-managed-environment" error
+#   (PEP 668 — common with Homebrew or Debian system Pythons), add
+#   --break-system-packages to the command above.
 
 # If you (or a teammate) used a non-editable install, force a clean reinstall
 # after every pull so the package matches the checked-out SKILL.md files:
 pip install --force-reinstall --no-deps ~/.agents/skills/scientia
+#   Again, add --break-system-packages on a PEP 668 externally-managed env.
 
 # Verify the install resolves to the repo, not a stale site-packages copy:
 python -c "import scientia, pathlib; print(scientia.__file__)"
