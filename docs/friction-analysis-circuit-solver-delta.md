@@ -104,13 +104,17 @@ Two coupled defects:
     convention. … sibling boards in this repo also write `<change-id>/task-N`
     refs, so a reconstructed name can merge another board's work into this trunk."
 
-### Still recommended (not landed)
+### Emit-time guard (LANDED)
 
-- **Emit-time guard:** `scientia-hermes-emit` preflight should detect that the
-  same change-id has already been emitted to a *different* board within the same
-  `git-common-dir` and refuse (or require a distinct branch prefix). Sharing one
-  repo across three live lanes of one change-id is the structural hazard; a
-  per-lane guard makes it impossible to do silently.
+`scientia.hermes.preflight.repo_reality_check` (pure detection in
+`validators.cross_lane_task_branches`) now probes the repo's branch refs and
+detects when the same change-id already has task branches in a **sibling lane**
+of the shared repo. It **errors** when no board is set (bare
+`<change-id>/task-N` refs in a multi-lane repo are indistinguishable) and
+**warns** when the board is set (namespaced refs are safe, but the integrator
+must still merge the handed-off SHA). The emit SKILL runs it at step 7 and
+refuses on the error. Probes are injectable, so the deterministic suite exercises
+it with no git present.
 
 ---
 
@@ -191,15 +195,22 @@ The Component Map is authored from the design narrative and never validated
 against the repository it will execute in. `scientia-write-design` /
 `scientia-generate-tasks` accept globs that don't resolve on `base_sha`.
 
-### Recommendation
+### Fix (LANDED)
 
-1. **Reality-check at design/emit.** Validate Component-Map globs (and each
-   task's `touches` roots) against the actual trunk tree at `base_sha`. If a
-   declared root does not exist, either scaffold it at emit or fail with "the
-   Component Map owns `project/src/**` but trunk has no such tree — scaffold it
-   or fix the map."
-2. **Scaffold the workspace skeleton** as an epic/preamble card so implementers
-   inherit the declared layout instead of improvising.
+`scientia.hermes.preflight.repo_reality_check` (pure detection in
+`validators.component_map_reality`) now reads the trunk tree at `base_sha` and
+**warns** for every Component-Map owned-root that has no presence on trunk —
+e.g. "component `netlist` owns `project/src/netlist` but no path under it exists
+on trunk @ base_sha — workers will find a blank workspace and may improvise a
+different layout." Warnings (not hard errors) because a greenfield change
+legitimately scaffolds the whole tree; the emit SKILL step 7 surfaces them and
+instructs scaffolding-or-fixing the map before proceeding.
+
+### Still recommended (not landed)
+
+- **Scaffold the workspace skeleton** as an epic/preamble card so implementers
+  inherit the declared layout instead of improvising — turning the warning above
+  into an automatic fix rather than an operator decision.
 
 ---
 
@@ -381,8 +392,15 @@ in the impl card body) closes the rest.
 | File | Change |
 |---|---|
 | `src/scientia/hermes/plan.py` | Board-namespace the worker branch (`{board}/{change_id}/task-N`); impl card reports exact branch+commit; integrate card merges the handed-off branch/SHA (not a reconstructed convention) and must verifiably reassign conflicts to the resolver. |
-| `tests/fixtures/hermes-plan.expected.json` | Regenerated golden `body_sha` for the intentional instruction change (board=None branch unchanged; 155 passed, only the 9 environmental `yaml` failures remain). |
+| `src/scientia/hermes/validators.py` | Pure detectors `cross_lane_task_branches` (FP1) and `component_map_reality` (FP3); also exported `touches_overlap_warnings` in `__all__`. |
+| `src/scientia/hermes/preflight.py` | `repo_reality_check` — git-grounded gate running both detectors (injectable branch/tree probes; errors on bare emit into a multi-lane repo, warns otherwise; warns on absent Component-Map roots). |
+| `scientia-hermes-emit/SKILL.md` | Step 7 now runs `repo_reality_check` and refuses on error. |
+| `tests/…` | 15 new tests across `test_hermes_validators.py` and `test_hermes_preflight.py`. |
+| `tests/fixtures/hermes-plan.expected.json` | Regenerated golden `body_sha` for the intentional instruction change (board=None branch unchanged). |
 | `README.md` | Editable-install (`pip install -e`) for all paths + "Keeping the package in sync (avoid stale wheels)" section. |
+
+Suite after all changes: **170 passed**, only the 9 environmental `yaml`
+failures/errors remain (pytest interpreter lacks pyyaml).
 
 > **Live board:** this analysis was strictly read-only. Delta's trunk is already
 > contaminated (FP1) and continuing dispatch would merge more sibling-board
@@ -408,8 +426,10 @@ execution time.* Delta extends it in two directions:
    exact tool/ref and a check that the intent took effect. An instruction whose
    success is never verified is indistinguishable from one that silently failed.
 
-The highest-leverage next steps are the three not-yet-landed guards: the
-emit-time shared-change-id/repo check (FP1), the status-skill
-blocked-but-not-reassigned detector (FP2), and the Component-Map-vs-trunk
-reality check (FP3). Together with the changes landed here, they convert delta's
-two silent corruptions into loud, early failures.
+Two of the three highest-leverage guards are now landed — the emit-time
+shared-change-id/repo check (FP1) and the Component-Map-vs-trunk reality check
+(FP3) — converting delta's two silent corruptions into loud, early emit-time
+failures. The remaining one is the runtime detector: a `scientia-hermes-status`
+check for a `blocked` card whose reason claims reassignment but whose `assignee`
+is unchanged (FP2), which would catch the conflict-resolver dead-end on a live
+board rather than at emit.

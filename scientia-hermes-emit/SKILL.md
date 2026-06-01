@@ -74,7 +74,16 @@ clean preflight. Absent a `hermes:` config block, do not activate at all.
    shared contract are at risk of independent type invention. Run
    `scientia.hermes.preflight.check(plan, ...)` and refuse on any error.
    Pass `known_profiles` as the set of prefixed profile names that init
-   provisioned.
+   provisioned. Also run the git-grounded guard
+   `scientia.hermes.preflight.repo_reality_check(plan, comp_map=comp_map,
+   tasks=tasks, base_sha=base_sha)` and **refuse on any error** (surface its
+   warnings verbatim). It catches the two failures that silently corrupted a
+   prior run's trunk: (a) the same `change-id` already emitted to a *sibling
+   board in this shared git repo* — an error when no board is set (bare
+   `<change-id>/task-N` refs would collide), a warning when namespaced; and
+   (b) Component-Map owned roots that **do not exist on trunk @ `base_sha`**, so
+   workers would find a blank workspace and improvise a divergent layout. On (b),
+   either scaffold the declared skeleton or fix the Component Map before emit.
 8. **Verify dispatcher CWD before apply.** Before writing any cards, confirm
    the dispatcher (daemon) will run from the correct project root:
    - Show: `python3 -c "import scientia.paths as p; print(p.project_root())"` — this is the

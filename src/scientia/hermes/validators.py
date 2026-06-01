@@ -13,6 +13,7 @@ decomposition smell to surface, not a hard error.
 from __future__ import annotations
 
 import fnmatch
+import re
 from collections import defaultdict
 from typing import Optional, Sequence
 
@@ -20,7 +21,15 @@ from scientia.hermes import idempotency
 from scientia.hermes.parse import ComponentMap, Task
 from scientia.hermes.plan import EmitPlan, ProfileModel, Routing
 
-__all__ = ["validate_plan", "validate_routing", "ownership_smells", "verify_touches"]
+__all__ = [
+    "validate_plan",
+    "validate_routing",
+    "ownership_smells",
+    "verify_touches",
+    "touches_overlap_warnings",
+    "cross_lane_task_branches",
+    "component_map_reality",
+]
 
 
 def _all_cards(plan: EmitPlan):
@@ -225,4 +234,105 @@ def touches_overlap_warnings(tasks: Sequence[Task]) -> list[str]:
                 f"declared — consider adding produces-contract/uses-contract "
                 f"markers to prevent independent type invention"
             )
+    return warnings
+
+
+def cross_lane_task_branches(
+    change_id: str,
+    board: Optional[str],
+    existing_branches: Sequence[str],
+) -> dict[str, list[str]]:
+    """Group existing task branches for ``change_id`` by lane, excluding the current board.
+
+    A task branch is ``[<lane>/]<change_id>/task-<N>``; the lane is everything
+    before ``<change_id>/`` (``""`` for a bare ref). Several boards can target
+    the SAME ``change_id`` inside ONE git repo (a shared object store / branch
+    namespace — e.g. parallel ``circuit-solver-{beta,gamma,delta}`` worktrees),
+    so any branch whose lane differs from ``board`` is a sibling lane sharing
+    this ref namespace — the condition that merged a sibling's work into
+    circuit-solver-delta's trunk.
+
+    Returns ``{lane: [branches]}`` for those sibling lanes only (empty == this
+    repo holds task branches for no lane but the current board). Pure: the caller
+    supplies ``existing_branches`` (e.g. ``git for-each-ref refs/heads``).
+    """
+    pat = re.compile(rf"^(?:(?P<lane>.+)/)?{re.escape(change_id)}/task-\d+$")
+    current = (board or "").strip("/")
+    lanes: dict[str, list[str]] = defaultdict(list)
+    for raw in existing_branches:
+        ref = raw.strip()
+        m = pat.match(ref)
+        if not m:
+            continue
+        lane = (m.group("lane") or "").strip("/")
+        if lane == current:
+            continue
+        lanes[lane].append(ref)
+    return {lane: sorted(set(refs)) for lane, refs in sorted(lanes.items())}
+
+
+def _glob_root(glob: str) -> str:
+    """The literal directory prefix of a path glob, before the first wildcard.
+
+    ``project/src/netlist/**`` -> ``project/src/netlist``;
+    ``project/src/net*`` -> ``project/src`` (drops the partial segment);
+    ``**/x`` -> ``""`` (wildcard-rooted: owns everything, nothing to check).
+    """
+    cut = len(glob)
+    for i, ch in enumerate(glob):
+        if ch in "*?[":
+            cut = i
+            break
+    prefix = glob[:cut]
+    if cut < len(glob) and not prefix.endswith("/"):
+        # the cut fell mid-segment; keep only complete path segments
+        prefix = prefix.rsplit("/", 1)[0] if "/" in prefix else ""
+    return prefix.rstrip("/")
+
+
+def component_map_reality(
+    comp_map: ComponentMap,
+    tasks: Sequence[Task],
+    trunk_paths: Sequence[str],
+) -> list[str]:
+    """Warn when a Component Map owned-root has no presence in the trunk tree.
+
+    Each owned glob (e.g. ``project/src/netlist/**``) has a literal root
+    (``project/src/netlist``). If no tracked path in ``trunk_paths`` lives under
+    that root, an implementer opening the workspace finds it blank and improvises
+    a divergent layout — the friction that detached circuit-solver-delta's plan
+    from its repo (the design owned ``project/src/**`` but trunk had only
+    ``project/.gitkeep``; workers built a top-level ``crates/`` instead, and the
+    touches/wave/contract machinery — all keyed on the declared paths — became
+    moot for the code that actually shipped).
+
+    Returns one message per absent root. These are warnings, not hard errors: a
+    greenfield change legitimately scaffolds the whole tree from nothing. The
+    emit skill decides whether to scaffold the skeleton, fix the Component Map,
+    or proceed. Pure: the caller supplies ``trunk_paths`` (e.g.
+    ``git ls-tree -r --name-only <base_sha>``).
+    """
+    paths = [p.strip() for p in trunk_paths if p.strip()]
+
+    def _present(root: str) -> bool:
+        if not root:
+            return True  # wildcard-rooted glob owns everything; nothing to check
+        return any(p == root or p.startswith(root + "/") for p in paths)
+
+    warnings: list[str] = []
+    for component in sorted(comp_map.owned):
+        roots: list[str] = []
+        for g in comp_map.owned[component]:
+            r = _glob_root(g)
+            if r and r not in roots:
+                roots.append(r)
+        for r in roots:
+            if not _present(r):
+                warnings.append(
+                    f"component {component!r} owns {r!r} (from its Component Map "
+                    f"globs) but no path under it exists on trunk @ base_sha — "
+                    f"workers will find a blank workspace and may improvise a "
+                    f"different layout. Scaffold the skeleton at emit or fix the "
+                    f"Component Map before emitting."
+                )
     return warnings

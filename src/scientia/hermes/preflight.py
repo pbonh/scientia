@@ -27,13 +27,17 @@ from __future__ import annotations
 import os
 import shutil
 import socket
+import subprocess
 from dataclasses import dataclass, field
-from typing import Callable, Optional
+from typing import TYPE_CHECKING, Callable, Optional, Sequence
 from urllib.parse import urlsplit
 
 from scientia.hermes.plan import EmitPlan
 
-__all__ = ["PreflightResult", "check", "gateway_check"]
+if TYPE_CHECKING:  # annotations only — avoids any import-time coupling
+    from scientia.hermes.parse import ComponentMap, Task
+
+__all__ = ["PreflightResult", "check", "gateway_check", "repo_reality_check"]
 
 _LOOPBACK_HOSTS = {"127.0.0.1", "localhost", "::1", ""}
 _DASHBOARD_DEFAULT_PORT = 9119
@@ -65,6 +69,37 @@ def _default_dashboard_probe(port: int = _DASHBOARD_DEFAULT_PORT) -> bool:
 
 def _default_cli_probe() -> bool:
     return shutil.which("hermes") is not None
+
+
+def _run_git(args: list[str]) -> list[str]:
+    """Run a read-only git command in the cwd; return stripped output lines.
+
+    Returns ``[]`` on any failure (git absent, non-zero exit, timeout) so the
+    git-grounded guards degrade to "no findings" rather than raising at the gate.
+    """
+    try:
+        out = subprocess.run(
+            ["git", *args],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return []
+    if out.returncode != 0:
+        return []
+    return [ln.strip() for ln in out.stdout.splitlines() if ln.strip()]
+
+
+def _default_branch_probe() -> list[str]:
+    """Every local branch short-ref in the current repo."""
+    return _run_git(["for-each-ref", "--format=%(refname:short)", "refs/heads"])
+
+
+def _default_tree_probe(base_sha: str) -> list[str]:
+    """Every tracked path in the trunk tree at ``base_sha``."""
+    return _run_git(["ls-tree", "-r", "--name-only", base_sha])
 
 
 def check(
@@ -224,3 +259,73 @@ def gateway_check(
         gateway_probe=gateway_probe,
         cli_probe=cli_probe,
     )
+
+
+def repo_reality_check(
+    plan: EmitPlan,
+    *,
+    comp_map: Optional["ComponentMap"] = None,
+    tasks: Sequence["Task"] = (),
+    base_sha: Optional[str] = None,
+    branch_probe: Optional[Callable[[], list[str]]] = None,
+    tree_probe: Optional[Callable[[str], list[str]]] = None,
+) -> PreflightResult:
+    """Git-grounded guards that catch a plan detached from the repo it will run in.
+
+    Two checks, both deterministic given their injected probes (so the
+    deterministic suite runs them with no git present):
+
+    1. **Cross-lane branch collision.** Several boards can target the SAME
+       ``change_id`` inside ONE git repo (a shared object store / branch
+       namespace). If sibling-lane task branches for this ``change_id`` already
+       exist, an integrator that reconstructs ``<change-id>/task-N`` merges the
+       wrong lane's work — the failure that corrupted circuit-solver-delta's
+       trunk. An **unset board** (which produces bare, collision-prone refs while
+       sibling lanes exist) is an ERROR; a **set board** (namespaced refs) is a
+       WARNING so the operator knows the repo is shared.
+
+    2. **Component Map vs trunk.** Owned-glob roots with no presence on trunk @
+       ``base_sha`` are surfaced as WARNINGS — workers will otherwise improvise a
+       layout the touches/wave/contract math never modeled.
+
+    Each check is skipped cleanly when its inputs are absent. Probes default to
+    shelling out to ``git`` in the cwd and return empty on any failure, so this
+    never raises. Run it at emit step 7, alongside :func:`check`.
+    """
+    from scientia.hermes import validators  # local import keeps module load light
+
+    errors: list[str] = []
+    warnings: list[str] = []
+
+    bp = branch_probe or _default_branch_probe
+    sibling = validators.cross_lane_task_branches(plan.change_id, plan.board, bp())
+    if sibling:
+        lanes_desc = "; ".join(
+            f"{lane or '(bare, no board prefix)'}: {len(refs)} branch(es)"
+            for lane, refs in sibling.items()
+        )
+        if not (plan.board or "").strip():
+            errors.append(
+                f"change-id {plan.change_id!r} already has task branches from "
+                f"other lane(s) in this git repo [{lanes_desc}], but this emit "
+                f"has no board set — it would produce bare `<change-id>/task-N` "
+                f"refs in a repo already shared by other lanes, where an "
+                f"integrator cannot tell them apart. Set `hermes.board` so this "
+                f"lane's branches are namespaced like the others "
+                f"(`<board>/<change-id>/task-N`)."
+            )
+        else:
+            warnings.append(
+                f"change-id {plan.change_id!r} also has task branches in sibling "
+                f"lane(s) sharing this git repo [{lanes_desc}]. This lane's "
+                f"branches are namespaced under `{plan.board}/` so they will not "
+                f"collide, but integrators must merge the handed-off branch/SHA, "
+                f"never a reconstructed `<change-id>/task-N` (which resolves to a "
+                f"sibling lane's work)."
+            )
+
+    if comp_map is not None and base_sha:
+        tp = tree_probe or _default_tree_probe
+        warnings.extend(validators.component_map_reality(comp_map, tasks, tp(base_sha)))
+
+    return PreflightResult(ok=not errors, errors=errors, warnings=warnings)

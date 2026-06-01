@@ -6,6 +6,7 @@ The gateway probe is injected so these run with no Hermes present (AC-10).
 from pathlib import Path
 
 from scientia.hermes import parse, preflight
+from scientia.hermes.parse import ComponentMap
 from scientia.hermes.plan import PlanOptions, Routing, build_plan
 
 FIX = Path(__file__).resolve().parent.parent / "fixtures" / "hermes-change"
@@ -98,3 +99,70 @@ def test_cli_backend_ignores_non_loopback_rest_base():
         rest_base="http://10.0.0.5:8787/api/plugins/kanban", cli_probe=lambda: True,
     )
     assert res.ok and res.errors == []
+
+
+# --------------------------------------------------------------------------- #
+# repo_reality_check (git-grounded: shared change-id + Component Map vs trunk)  #
+# --------------------------------------------------------------------------- #
+def _board_plan(board):
+    tasks = parse.parse_tasks((FIX / "tasks.md").read_text())
+    c4, cm, contracts = parse.parse_design((FIX / "design.md").read_text())
+    routing = Routing(
+        default_implementer="implementer", default_reviewer="reviewer",
+        default_integrator="integrator", resolver="conflict-resolver", board=board,
+    )
+    return build_plan("cid", tasks, c4, cm, contracts, routing, PlanOptions())
+
+
+def test_reality_warns_on_namespaced_sibling_lane():
+    plan = _board_plan("circuit-solver-delta")
+    branches = lambda: ["main", "circuit-solver-gamma/cid/task-1",
+                        "circuit-solver-delta/cid/task-1"]
+    res = preflight.repo_reality_check(plan, branch_probe=branches)
+    assert res.ok and res.errors == []
+    assert any("sibling lane" in w and "circuit-solver-gamma" in w for w in res.warnings)
+
+
+def test_reality_errors_on_bare_emit_in_multilane_repo():
+    plan = _board_plan(None)  # this emit would produce bare cid/task-N refs
+    branches = lambda: ["circuit-solver-gamma/cid/task-1", "circuit-solver-beta/cid/task-2"]
+    res = preflight.repo_reality_check(plan, branch_probe=branches)
+    assert not res.ok and any("no board set" in e for e in res.errors)
+
+
+def test_reality_quiet_on_idempotent_reemit_same_lane():
+    plan = _board_plan("circuit-solver-delta")
+    branches = lambda: ["circuit-solver-delta/cid/task-1", "circuit-solver-delta/cid/task-2"]
+    res = preflight.repo_reality_check(plan, branch_probe=branches)
+    assert res.ok and res.warnings == []
+
+
+def test_reality_warns_on_absent_component_root():
+    plan = _board_plan("circuit-solver-delta")
+    cm = ComponentMap({"netlist": ("project/src/netlist/**",)})
+    res = preflight.repo_reality_check(
+        plan, comp_map=cm, base_sha="abc123",
+        branch_probe=lambda: ["main"],
+        tree_probe=lambda sha: ["project/.gitkeep", "crates/digital-kernel/src/lib.rs"],
+    )
+    assert res.ok  # warning, not error
+    assert any("blank workspace" in w and "netlist" in w for w in res.warnings)
+
+
+def test_reality_clean_when_no_siblings_and_root_present():
+    plan = _board_plan("circuit-solver-delta")
+    cm = ComponentMap({"netlist": ("project/src/netlist/**",)})
+    res = preflight.repo_reality_check(
+        plan, comp_map=cm, base_sha="abc123",
+        branch_probe=lambda: ["main", "circuit-solver-delta/cid/task-1"],
+        tree_probe=lambda sha: ["project/src/netlist/graph.rs"],
+    )
+    assert res.ok and res.errors == [] and res.warnings == []
+
+
+def test_reality_never_raises_with_default_probes():
+    # Default probes shell out to git; even outside a repo they must degrade
+    # to no findings rather than raise.
+    plan = _board_plan("circuit-solver-delta")
+    res = preflight.repo_reality_check(plan)  # no base_sha/comp_map -> reality skipped
+    assert isinstance(res, preflight.PreflightResult)

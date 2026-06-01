@@ -116,3 +116,77 @@ def test_no_overlap_warning_when_contract_declared():
              uses_contracts=("Shared",)),
     ]
     assert validators.touches_overlap_warnings(tasks) == []
+
+
+# --------------------------------------------------------------------------- #
+# cross_lane_task_branches (shared change-id / shared repo)                    #
+# --------------------------------------------------------------------------- #
+CID = "2026-05-28-multidomain-solver-architecture"
+
+
+def test_no_sibling_lanes_when_only_current_board_branches_exist():
+    branches = ["main", f"circuit-solver-delta/{CID}/task-1",
+                f"circuit-solver-delta/{CID}/task-2"]
+    assert validators.cross_lane_task_branches(CID, "circuit-solver-delta", branches) == {}
+
+
+def test_detects_namespaced_sibling_lane():
+    branches = [f"circuit-solver-delta/{CID}/task-1",
+                f"circuit-solver-gamma/{CID}/task-1",
+                f"circuit-solver-beta/{CID}/task-11"]
+    out = validators.cross_lane_task_branches(CID, "circuit-solver-delta", branches)
+    assert set(out) == {"circuit-solver-beta", "circuit-solver-gamma"}
+    assert out["circuit-solver-beta"] == [f"circuit-solver-beta/{CID}/task-11"]
+
+
+def test_detects_bare_lane_as_empty_prefix():
+    # a prior un-namespaced emit left bare <change-id>/task-N refs
+    branches = [f"{CID}/task-1", f"{CID}/task-11", f"circuit-solver-delta/{CID}/task-1"]
+    out = validators.cross_lane_task_branches(CID, "circuit-solver-delta", branches)
+    assert set(out) == {""}
+    assert out[""] == [f"{CID}/task-1", f"{CID}/task-11"]
+
+
+def test_ignores_unrelated_change_ids_and_non_task_refs():
+    branches = [f"other-change/{CID[:-1]}X/task-1", f"{CID}/feature-foo",
+                f"{CID}/task-", "wt/t_abc123", f"{CID}/task-3"]
+    out = validators.cross_lane_task_branches(CID, "circuit-solver-delta", branches)
+    # only the well-formed bare task-3 counts
+    assert out == {"": [f"{CID}/task-3"]}
+
+
+def test_board_none_treats_bare_as_current_lane():
+    branches = [f"{CID}/task-1", f"circuit-solver-delta/{CID}/task-1"]
+    out = validators.cross_lane_task_branches(CID, None, branches)
+    # current lane is "" (bare); only the namespaced delta lane is a sibling
+    assert set(out) == {"circuit-solver-delta"}
+
+
+# --------------------------------------------------------------------------- #
+# component_map_reality (plan-vs-trunk skeleton)                               #
+# --------------------------------------------------------------------------- #
+def test_glob_root_extraction():
+    assert validators._glob_root("project/src/netlist/**") == "project/src/netlist"
+    assert validators._glob_root("project/src/net*") == "project/src"
+    assert validators._glob_root("**/x") == ""
+    assert validators._glob_root("project/Cargo.toml") == "project/Cargo.toml"
+
+
+def test_reality_warns_when_owned_root_absent_from_trunk():
+    cm = ComponentMap({"netlist": ("project/src/netlist/**", "project/tests/netlist/**")})
+    # trunk only has a .gitkeep — the delta situation
+    trunk = ["project/.gitkeep", "project/README.md", "crates/digital-kernel/src/lib.rs"]
+    warnings = validators.component_map_reality(cm, [], trunk)
+    assert len(warnings) == 2
+    assert all("netlist" in w and "blank workspace" in w for w in warnings)
+
+
+def test_reality_quiet_when_root_present():
+    cm = ComponentMap({"netlist": ("project/src/netlist/**",)})
+    trunk = ["project/src/netlist/graph.rs", "project/Cargo.toml"]
+    assert validators.component_map_reality(cm, [], trunk) == []
+
+
+def test_reality_quiet_for_wildcard_root_glob():
+    cm = ComponentMap({"any": ("**/foo.rs",)})
+    assert validators.component_map_reality(cm, [], []) == []
