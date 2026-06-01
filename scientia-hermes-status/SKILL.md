@@ -48,17 +48,33 @@ what the `conflict-resolver` escalated.
    reason contains "review-required" and whose handoff metadata shows all tests
    passing is a **green self-block** — redundant given the dedicated review
    stage. Recommend `unblock` rather than surfacing it as an escalation.
-8. **Report drift.** A ledger id absent from the board (or a board card with no
+8. **Detect mis-routed reassignments (conflict-resolver dead-ends).** Build a
+   `scientia.hermes.status.LiveCard` per board card (its `assignee`, `status`,
+   `reason`, and mapped `task_number`/`stage`) and run
+   `scientia.hermes.status.detect_misrouted_reassignments(cards, resolver)`,
+   where `resolver` is the prefixed conflict-resolver name from step 1. It
+   returns `blocked` cards whose reason *claims* a reassignment to the resolver
+   but whose `assignee` was never changed to it — the integrator commented and
+   blocked instead of reassigning, so the resolver never receives the card and
+   it stalls **invisibly**. Surface each as a **genuine escalation** — more
+   urgent than a normal block, because it looks handled but is not — naming the
+   integrator that still owns it. The fix is an operator reassign or a re-emit;
+   this skill is read-only.
+9. **Report drift.** A ledger id absent from the board (or a board card with no
    ledger entry) is reported as drift to reconcile (re-emit).
-9. **Warn about worktree recycling.** Note that worktree directories are
-   recycled by the dispatcher; code analysis should use git branch references
-   (`git show <branch>:<path>`) rather than filesystem reads.
+10. **Warn about worktree recycling.** Note that worktree directories are
+    recycled by the dispatcher; code analysis should use git branch references
+    (`git show <branch>:<path>`) rather than filesystem reads.
 
 ## Decision rules
 
 - Read-only: never create, reassign, or archive — recommend a re-emit instead.
 - A reassignment to `conflict-resolver` that is still `running` is **normal
    progress**, not an escalation; only a `block` is an escalation.
+- A `blocked` card whose reason claims a reassignment to the resolver but whose
+   `assignee` is unchanged is a **dead-end, not progress** — the resolver never
+   got it. Always surface it (step 8); it is the most easily missed escalation
+   because it reads as handled.
 - Recommend the next human action only when something is genuinely escalated.
 
 ## Acceptance behavior
@@ -67,3 +83,5 @@ what the `conflict-resolver` escalated.
   ledger.
 - Escalations are listed with their reasons; routine resolver reassignments are
   not reported as blocks.
+- A blocked card that claims reassignment but was never reassigned to the
+  resolver is reported as a dead-end escalation, not silently counted as routed.
