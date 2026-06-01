@@ -25,7 +25,7 @@
       "tenant": "2026-05-28-rag-replacement",
       "priority": null,
       "skills": [],
-      "body_sha": "67509e5e579d",
+      "body_sha": "933e1c9977c6",
       "model": null,
       "wave": 0
     },
@@ -56,7 +56,7 @@
       "tenant": "2026-05-28-rag-replacement",
       "priority": null,
       "skills": [],
-      "body_sha": "f6b3fd7715cd",
+      "body_sha": "48137216ef16",
       "model": null
     },
     {
@@ -71,7 +71,7 @@
       "tenant": "2026-05-28-rag-replacement",
       "priority": null,
       "skills": [],
-      "body_sha": "06eb7fcb4557",
+      "body_sha": "a036a23a1823",
       "model": null,
       "wave": 0
     },
@@ -102,7 +102,7 @@
       "tenant": "2026-05-28-rag-replacement",
       "priority": null,
       "skills": [],
-      "body_sha": "54d9a6e03a0f",
+      "body_sha": "3fd1123f74a0",
       "model": null
     },
     {
@@ -118,7 +118,7 @@
       "tenant": "2026-05-28-rag-replacement",
       "priority": null,
       "skills": [],
-      "body_sha": "000c238bc127",
+      "body_sha": "51afdd648d77",
       "model": null,
       "wave": 1
     },
@@ -149,7 +149,7 @@
       "tenant": "2026-05-28-rag-replacement",
       "priority": null,
       "skills": [],
-      "body_sha": "9577d642d7fc",
+      "body_sha": "f8284cdf0e82",
       "model": null
     },
     {
@@ -165,7 +165,7 @@
       "tenant": "2026-05-28-rag-replacement",
       "priority": null,
       "skills": [],
-      "body_sha": "73d81b85be9a",
+      "body_sha": "b91075cbf061",
       "model": null,
       "wave": 0
     },
@@ -196,7 +196,7 @@
       "tenant": "2026-05-28-rag-replacement",
       "priority": null,
       "skills": [],
-      "body_sha": "9644312e5de5",
+      "body_sha": "ff5d58b276c9",
       "model": null
     }
   ]

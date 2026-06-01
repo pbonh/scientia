@@ -180,7 +180,7 @@ def _trace_block(task: Task) -> str:
     return "\n".join(lines) if lines else "- _(no traceability markers)_"
 
 
-def _instructions(task: Task, stage: str, resolver: str, base_sha: Optional[str] = None) -> str:
+def _instructions(task: Task, stage: str, resolver: str, base_sha: Optional[str] = None, branch: Optional[str] = None) -> str:
     if stage in ("impl", "single"):
         base = (
             f"Implement task #{task.number} — {task.title} — in an isolated "
@@ -189,13 +189,27 @@ def _instructions(task: Task, stage: str, resolver: str, base_sha: Optional[str]
         )
         if base_sha:
             base += f" Branch from commit `{base_sha}`. If that commit is no longer on trunk, rebase onto current trunk but verify your touches still apply."
+        if branch:
+            base += (
+                f" Commit your work to the branch `{branch}`. This is THIS "
+                f"board's ref namespace — do NOT push to a bare "
+                f"`<change-id>/task-N` ref, which sibling boards sharing this "
+                f"repo also write to (cross-board branch collision corrupts trunk)."
+            )
+        commit_line = (
+            f"- Your work is committed to branch `{branch}`, and your handoff "
+            f"reports its exact `branch` name and final `commit` SHA\n"
+            if branch else ""
+        )
         base += (
             "\n\n## Completion Criteria\n"
             "Complete (do NOT block for review) when ALL of:\n"
             "- Every spec scenario traced above has a passing test\n"
             "- `cargo test` passes (or the verification command in the handoff)\n"
             "- `cargo clippy` passes with no warnings\n"
-            "- All edits are within the declared touches paths\n\n"
+            "- All edits are within the declared touches paths\n"
+            f"{commit_line}"
+            "\n"
             "Do NOT self-block for review — the next card in this pipeline is a "
             "dedicated reviewer. If you have a design concern, note it in the "
             "handoff `residual_risk` field and complete anyway."
@@ -213,13 +227,24 @@ def _instructions(task: Task, stage: str, resolver: str, base_sha: Optional[str]
             f"is satisfied and its tests pass; otherwise return it for revision."
         )
     if stage == "integrate":
+        expected = f"`{branch}`" if branch else f"`<change-id>/task-{task.number}`"
         return (
-            f"Merge the approved worker branch for task #{task.number} to trunk. "
-            f"**Attempt `git merge <branch>` first.** Only if git reports "
-            f"conflicts (exit code 1, conflict markers in files) do you reassign "
-            f"this card to the `{resolver}` profile and comment the two branch "
-            f"heads — do not block for a human. File overlap alone is NOT a "
-            f"conflict; you must actually attempt the merge.\n\n"
+            f"Merge task #{task.number}'s reviewed work to trunk. Merge the EXACT "
+            f"branch and commit SHA the implementer reported in its handoff "
+            f"(authoritative) — do NOT reconstruct a branch name by convention. "
+            f"The expected branch is {expected}; sibling boards in this repo also "
+            f"write `<change-id>/task-N` refs, so a reconstructed name can merge "
+            f"another board's work into this trunk. Confirm the branch tip is the "
+            f"reviewed commit before merging.\n\n"
+            f"**Attempt `git merge <handoff-commit>` first.** Only if git reports "
+            f"conflicts (exit code 1, conflict markers in files) do you hand the "
+            f"card to the `{resolver}` profile — and you MUST actually reassign it: "
+            f"change the card's assignee to `{resolver}` (a board reassign event), "
+            f"not merely comment that you reassigned. After reassigning, re-read "
+            f"the card and verify its assignee is `{resolver}`; otherwise the "
+            f"resolver never sees it. Comment the two branch heads — do not block "
+            f"for a human. File overlap alone is NOT a conflict; you must actually "
+            f"attempt the merge.\n\n"
             f"Before completing, verify the worker's actual edits match its "
             f"declared touches: run `git diff --name-only <base>..<branch_head>` "
             f"and flag any file outside the touches set as an undeclared edit "
@@ -228,8 +253,14 @@ def _instructions(task: Task, stage: str, resolver: str, base_sha: Optional[str]
     return task.title
 
 
-def compose_body(task: Task, stage: str, change_id: str, resolver: str, base_sha: Optional[str] = None) -> str:
-    """Render one work card's body from the shared templates (byte-stable)."""
+def compose_body(task: Task, stage: str, change_id: str, resolver: str, base_sha: Optional[str] = None, branch: Optional[str] = None) -> str:
+    """Render one work card's body from the shared templates (byte-stable).
+
+    ``branch`` is the task's board-namespaced worker branch. It is named in the
+    impl instructions (commit here) and the integrate instructions (merge this
+    exact ref, not a reconstructed `<change-id>/task-N` convention that sibling
+    boards in the same repo also write to).
+    """
     handoff = templates.render("hermes-handoff")
     body = templates.render(
         "hermes-card",
@@ -238,7 +269,7 @@ def compose_body(task: Task, stage: str, change_id: str, resolver: str, base_sha
         number=task.number,
         stage=stage,
         traces=_trace_block(task),
-        instructions=_instructions(task, stage, resolver, base_sha=base_sha),
+        instructions=_instructions(task, stage, resolver, base_sha=base_sha, branch=branch),
         handoff=handoff,
     )
     # Append touches and wave metadata as a machine-readable block for the
@@ -396,7 +427,15 @@ def build_plan(
     for task in sorted(tasks, key=lambda t: t.number):
         tr = routing.per_task.get(task.number, TaskRouting())
         workspace = tr.workspace or options.workspace
-        branch = f"{change_id}/task-{task.number}"
+        # Branch names live in the trunk repo's ref namespace. Several boards
+        # (lanes) can target the SAME change_id inside ONE git repo — e.g.
+        # parallel `circuit-solver-{beta,gamma,delta}` worktrees that share an
+        # object store. Without a per-board qualifier, every lane's integrator
+        # resolves the same `<change_id>/task-N` ref and merges a sibling
+        # board's work into its own trunk (the delta trunk-corruption failure).
+        # Prefix with the board slug so each lane owns a disjoint ref space.
+        board_prefix = f"{routing.board}/" if routing.board else ""
+        branch = f"{board_prefix}{change_id}/task-{task.number}"
         cross_keys = tuple(
             sorted(tkey(m, terminal) for m in sorted(cross[task.number]))
         )
@@ -406,7 +445,7 @@ def build_plan(
             return CardSpec(
                 key=tkey(task.number, stage),
                 title=f"[{stage}] #{task.number} {task.title}",
-                body=compose_body(task, stage, change_id, routing.resolver, base_sha=base_sha),
+                body=compose_body(task, stage, change_id, routing.resolver, base_sha=base_sha, branch=branch),
                 assignee=assignee,
                 parents=parents,
                 tenant=routing.tenant,

@@ -120,9 +120,12 @@ importable by whatever runs the skills.
 # 1. Clone the skills directly into the skills root so they are discovered.
 git clone <this-repo> ~/.agents/skills
 
-# 2. Install the supporting Python package (pip or uv).
-pip install ~/.agents/skills            # or:  uv pip install ~/.agents/skills
-#   networkx is an optional traversal extra:  pip install '~/.agents/skills[graph]'
+# 2. Install the supporting Python package EDITABLE (pip or uv).
+#    Use -e so a `git pull` updates the importable package in lockstep with the
+#    SKILL.md files it ships beside — a non-editable install freezes a copy and
+#    drifts stale (see "Keeping the package in sync" below).
+pip install -e ~/.agents/skills         # or:  uv pip install -e ~/.agents/skills
+#   networkx is an optional traversal extra:  pip install -e '~/.agents/skills[graph]'
 
 # 3. Point the pipeline at your project (where sources/, wiki/, proposals/ live).
 export SCIENTIA_ROOT=/path/to/your/project
@@ -134,7 +137,7 @@ symlink the `scientia*` directories into the skills root instead:
 ```bash
 git clone <this-repo> ~/src/scientia
 ln -s ~/src/scientia/scientia* ~/.agents/skills/
-pip install ~/src/scientia
+pip install -e ~/src/scientia
 ```
 
 ### Claude Code
@@ -153,14 +156,49 @@ for dir in ~/.agents/skills/scientia/scientia*/; do
   ln -s "$(realpath "$dir")" ~/.claude/skills/
 done
 
-# 3. Install the supporting Python package and set the project root.
-pip install ~/.agents/skills/scientia
+# 3. Install the supporting Python package EDITABLE and set the project root.
+pip install -e ~/.agents/skills/scientia
 export SCIENTIA_ROOT=/path/to/your/project
 ```
 
 Afterwards, `~/.claude/skills/` should contain the individual skill directories
 (e.g., `~/.claude/skills/scientia/`, `~/.claude/skills/scientia-ingest-source/`,
 etc.), not a top-level `scientia` directory that wraps them.
+
+### Keeping the package in sync (avoid stale wheels)
+
+The skills and the Python package ship in **one repo** and must move together:
+each `SKILL.md` calls functions in the installed `scientia` package, so when the
+two diverge the skills invoke an API the install does not have. A **non-editable**
+install (`pip install <path>`) copies a snapshot into site-packages; a later
+`git pull` updates the live `SKILL.md` files but **not** the frozen copy, and the
+pipeline fails mid-run with `AttributeError`/`ImportError` on names like
+`resolve_profile_prefix`, `verify_touches`, `touches_overlap_warnings`, or with a
+`hermes kanban task create` (the old CLI verb) — symptoms of code newer in the
+repo than in the install.
+
+Prevent it:
+
+```bash
+# Always install editable so the import path IS the repo (no frozen copy):
+pip install -e ~/.agents/skills/scientia
+
+# If you (or a teammate) used a non-editable install, force a clean reinstall
+# after every pull so the package matches the checked-out SKILL.md files:
+pip install --force-reinstall --no-deps ~/.agents/skills/scientia
+
+# Verify the install resolves to the repo, not a stale site-packages copy:
+python -c "import scientia, pathlib; print(scientia.__file__)"
+#   editable -> .../.agents/skills/scientia/src/scientia/__init__.py  (good)
+#   stale    -> .../site-packages/scientia/__init__.py                (reinstall)
+
+# A leftover build/ tree can shadow src/ on sys.path — remove it if present:
+rm -rf ~/.agents/skills/scientia/build
+```
+
+An editable install removes this failure mode at the source; the
+`python -c` check above is the quickest way to confirm a runtime is not on a
+stale copy before starting a pipeline run.
 
 ## Test
 
