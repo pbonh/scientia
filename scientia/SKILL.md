@@ -78,12 +78,31 @@ commitments (`write_design`, `record_adr`) default to `pause_and_ask`.
 
 ## Recognized `config.yaml` keys
 
-Top-level: `confidence`, `thresholds`, `audit`, `modes`. Within:
+Top-level: `confidence`, `thresholds`, `audit`, `modes`, `hermes`. Within:
 `confidence.{source_count_curve, contradiction_floor, rollup}`;
 `thresholds.{proposal_seed_min, prior_art_floor, grill_dismiss_min,
 adr_recommend_accept_min, low_confidence_floor}`; `audit.{staleness_days}`;
 `modes.{ingest_source, audit_wiki, seed_proposal, grill_proposal, write_specs,
-write_design, record_adr, generate_tasks}`. Any other key is surfaced.
+write_design, record_adr, generate_tasks}`; the optional `hermes` block
+(execution layer — see below). Any other key is surfaced.
+
+## Optional execution layer (additive)
+
+When a `hermes:` block is present in `config.yaml` **and** the `tasks` stage has
+advanced clean, recommend the execution layer:
+`scientia-hermes-init → scientia-hermes-emit` (then `scientia-hermes-status` to
+observe). This is the *only* hermes-related behavior the orchestrator gains, and
+it is purely additive — **absent the block, behavior is unchanged** and Hermes is
+never a dependency. When `hermes.conflict_prevention: true`, the `write_design`
+and `generate_tasks` stages also emit the gated ownership markers (Component Map,
+Shared Contracts, per-task `component`/`touches`/`*-contract`), and
+`validate_design`/`validate_tasks` are called with `require_prevention=True`.
+
+Profiles are project-specific: `scientia-hermes-init` prefixes each profile
+name with the board slug (or a custom `profile_prefix`) and composes a
+project-specific SOUL.md for each role from the C4 architecture, ADRs,
+contracts, and spec scenarios. This ensures kanban agents stay on-task for
+this particular project rather than executing generically.
 
 ## Acceptance behavior
 

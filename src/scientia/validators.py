@@ -194,7 +194,7 @@ def validate_specs(specs_dir: Path) -> list[str]:
     return errors
 
 
-def validate_design(path: Path) -> list[str]:
+def validate_design(path: Path, *, require_prevention: bool = False) -> list[str]:
     text = _read(path)
     if text is None:
         return [f"design.md not found: {path}"]
@@ -205,6 +205,20 @@ def validate_design(path: Path) -> list[str]:
         errors.append(
             "design.md must contain at least one mermaid C4Container diagram"
         )
+    # 0.2 conflict-prevention gate (only when enabled): the C4-derived ownership
+    # inputs the Hermes wave/contract math needs must be present.
+    if require_prevention:
+        present = {h.lower().rstrip(":") for h in _headings(text)}
+        if "component map" not in present:
+            errors.append(
+                "design.md must contain a '## Component Map' when "
+                "conflict_prevention is on"
+            )
+        if "shared contracts" not in present:
+            errors.append(
+                "design.md must contain a '## Shared Contracts' when "
+                "conflict_prevention is on"
+            )
     return errors
 
 
@@ -225,7 +239,7 @@ def validate_adrs(adrs_dir: Path) -> list[str]:
     return errors
 
 
-def validate_tasks(path: Path) -> list[str]:
+def validate_tasks(path: Path, *, require_prevention: bool = False) -> list[str]:
     text = _read(path)
     if text is None:
         return [f"tasks.md not found: {path}"]
@@ -235,4 +249,16 @@ def validate_tasks(path: Path) -> list[str]:
         errors.append("tasks.md contains no checklist items ('- [ ]')")
     if "traces-spec" not in text:
         errors.append("tasks.md has no 'traces-spec' traceability markers")
+    # 0.2 conflict-prevention gate (only when enabled): every task must carry the
+    # ownership markers the wave math reads. Structural only — the touches ⊆
+    # owned-globs *smell* (which needs design.md) is surfaced by
+    # scientia.hermes.validators.ownership_smells, not here.
+    if require_prevention:
+        from scientia.hermes.parse import parse_tasks
+
+        for task in parse_tasks(text):
+            if task.component is None:
+                errors.append(f"task #{task.number} is missing a 'component' marker")
+            if not task.touches:
+                errors.append(f"task #{task.number} is missing a 'touches' marker")
     return errors

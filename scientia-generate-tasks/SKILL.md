@@ -34,6 +34,23 @@ nothing executes the tasks.
 - `scientia.validators.validate_tasks` checks for checklist items and
   `traces-spec` markers.
 
+## Ownership markers (gated: `hermes.conflict_prevention: true`)
+
+When the optional `hermes:` block is present **and** `conflict_prevention` is
+true, additionally tag each task with the markers the execution layer's wave +
+ratification math reads (parsed by `scientia.hermes.parse.parse_tasks`):
+
+- `<!-- component: <c4-component-id> -->` — the component this task realizes.
+- `<!-- touches: path, path -->` — the files it modifies, **constrained to that
+  component's owned globs** from `design.md`'s Component Map (a cross-boundary
+  touch is a smell `scientia.hermes.validators.ownership_smells` surfaces).
+- `<!-- produces-contract: X -->` / `<!-- uses-contract: X -->` — shared
+  interfaces it defines / consumes. Order producers before consumers.
+
+`scientia.validators.validate_tasks(path, require_prevention=True)` then requires
+each task to carry `component` and `touches`. When prevention is off, none of
+these are required and `tasks.md` keeps its current shape (AC-16).
+
 ## Decision rules
 
 - A task with no traceable scenario is a smell — either it is missing a spec or

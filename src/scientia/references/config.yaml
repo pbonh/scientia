@@ -61,3 +61,87 @@ modes:
   write_design: pause_and_ask
   record_adr: pause_and_ask
   generate_tasks: autonomous
+
+# Optional execution layer (scientia-hermes-*). Absent this block, the pipeline
+# still ends at tasks.md and never touches Hermes. Present, the scientia
+# orchestrator recommends scientia-hermes-init -> scientia-hermes-emit once tasks
+# are complete. All keys are optional; the 0.2 defaults are shown.
+hermes:
+  board: ""                   # "" = the current project name (slugified project dir,
+                              #      via scientia.hermes.board.resolve_board); else an explicit slug
+  trunk_branch: ""            # "" = the repo's current git branch at init time; else an
+                              #      explicit trunk (e.g. "main", "gamma"). scientia-hermes-init
+                              #      bakes this into the integrator & conflict-resolver SOULs so
+                              #      they merge into the right branch and never infer trunk from
+                              #      the daemon's cwd (friction F-3).
+  # profile_prefix:           # ABSENT = use the board slug as prefix (automatic, zero-config);
+                              #      e.g. board "circuit-solver-beta" → profiles "circuit-solver-beta-implementer",
+                              #      "circuit-solver-beta-reviewer", etc. Set to a custom string to override
+                              #      the prefix. Set to "" (empty) to DISABLE prefixing and use bare role
+                              #      names ("implementer", "reviewer", …) for backward compatibility.
+  tenant_strategy: change-id  # change-id | none
+  workspace: worktree         # scratch | worktree | dir:<absolute-path>
+  pipeline: impl-review-integrate   # impl-review-integrate | single
+  emit_epic: true
+  on_supersede: archive       # archive | leave
+  backend: cli                # cli | rest. `cli` drives the board through the
+                              # `hermes kanban` CLI (SQLite-direct); use it unless
+                              # a Hermes build actually serves the kanban REST
+                              # plugin at rest_base. Plain `hermes gateway` is the
+                              # *messaging* gateway and exposes no kanban HTTP API,
+                              # so `rest` connection-refuses (or 401s) on such hosts.
+  rest_base: http://127.0.0.1:8787/api/plugins/kanban   # only used when backend: rest
+  conflict_prevention: true   # C4-derived waves + shared-contract ratification
+  max_parallel_per_file_group: 2   # wave cap on tasks sharing a touched path
+  preflight:
+    require_gateway: true
+    require_profiles: true
+  # Default model config — used by any profile that doesn't override it below.
+  # Fireworks (https://app.fireworks.ai/models) is the default provider because
+  # it offers fast, OpenAI-compatible inference for leading open-weight models.
+  # Override per-profile or switch the default to any supported vendor.
+  models:
+    default:
+      provider: fireworks
+      model: accounts/fireworks/models/deepseek-v4-flash
+      base_url: https://api.fireworks.ai/inference/v1
+      api_key_env: FIREWORKS_API_KEY
+      temperature: 0.2
+      max_tokens: 131072
+  profiles:                   # provisioned/validated by scientia-hermes-init
+    implementer:
+      description: "Writes code + tests for one task in an isolated worktree."
+      model:
+        provider: fireworks
+        model: accounts/fireworks/models/glm-5p1
+        base_url: https://api.fireworks.ai/inference/v1
+        api_key_env: FIREWORKS_API_KEY
+        temperature: 0.1
+        max_tokens: 25344
+    reviewer:
+      description: "Reviews a completed task branch against its spec scenario."
+      model:
+        provider: fireworks
+        model: accounts/fireworks/models/kimi-k2p6
+        base_url: https://api.fireworks.ai/inference/v1
+        api_key_env: FIREWORKS_API_KEY
+        temperature: 0.3
+        max_tokens: 32768
+    integrator:
+      description: "Merges an approved branch to trunk; routes conflicts to conflict-resolver."
+      model:
+        provider: fireworks
+        model: accounts/fireworks/models/minimax-m2p7
+        base_url: https://api.fireworks.ai/inference/v1
+        api_key_env: FIREWORKS_API_KEY
+        temperature: 0.0
+        max_tokens: 24576
+    conflict-resolver:
+      description: "Reconciles merge/semantic conflicts using spec scenarios, ratified contracts, and C4 boundaries; resolves without human input where safe, escalates only genuine spec contradictions."
+      model:
+        provider: fireworks
+        model: accounts/fireworks/models/deepseek-v4-pro
+        base_url: https://api.fireworks.ai/inference/v1
+        api_key_env: FIREWORKS_API_KEY
+        temperature: 0.0
+        max_tokens: 131072
