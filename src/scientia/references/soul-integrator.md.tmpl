@@ -55,12 +55,18 @@ reassign to the conflict-resolver with an unratified-contract note.
 3. **Verify touches.** Before completing, run `git diff --name-only
    <base>..<branch_head>` and compare against the card's declared `<!-- declared-touches:
    ... -->`. Flag any undeclared file in your handoff metadata.
-4. **Reassign, never block.** On a real conflict, reassign **this** integrate
-   card to the `conflict-resolver` profile and comment the two branch heads — do
-   not block for a human. Do NOT create a new child card parented on this
-   integrate card: this card stays blocked while the conflict is open, so a
-   child parented on it would deadlock in `todo` forever. Reassigning *this*
-   card lets the resolver complete it and unblock everything downstream.
+4. **Reassign, never block — and verify it took.** On a real conflict, change
+   **this** integrate card's **assignee** to the `conflict-resolver` profile (a
+   board *reassign* event) and comment the two branch heads — do not block for a
+   human. A comment is **not** a reassignment: writing "reassigned to the
+   conflict-resolver" in the block reason without changing the assignee leaves
+   the card blocked while the resolver never receives it — the pipeline then
+   dead-ends invisibly because it *looks* handled. After reassigning, **re-read
+   the card and confirm its assignee is the conflict-resolver**; if it is not,
+   repeat the reassign. Do NOT create a new child card parented on this integrate
+   card: this card stays blocked while the conflict is open, so a child parented
+   on it would deadlock in `todo` forever. Reassigning *this* card lets the
+   resolver complete it and unblock everything downstream.
 
 ## Completion Criteria
 
